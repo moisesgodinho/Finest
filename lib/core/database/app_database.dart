@@ -18,6 +18,7 @@ import 'tables/credit_cards_table.dart';
 import 'tables/investments_table.dart';
 import 'tables/monthly_plans_table.dart';
 import 'tables/pet_progress_table.dart';
+import 'tables/subcategories_table.dart';
 import 'tables/transactions_table.dart';
 import 'tables/users_table.dart';
 
@@ -29,6 +30,7 @@ part 'app_database.g.dart';
     Accounts,
     CreditCards,
     Categories,
+    Subcategories,
     FinancialTransactions,
     MonthlyPlans,
     Investments,
@@ -47,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -63,6 +65,35 @@ class AppDatabase extends _$AppDatabase {
               creditCards.defaultPaymentAccountId,
             );
             await migrator.addColumn(creditCards, creditCards.isPrimary);
+          }
+          if (from < 3) {
+            await migrator.createTable(subcategories);
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.subcategoryId,
+            );
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.invoiceMonth,
+            );
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.invoiceYear,
+            );
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.expenseKind,
+            );
+          }
+          if (from < 4) {
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.dueDate,
+            );
+            await migrator.addColumn(
+              financialTransactions,
+              financialTransactions.isPaid,
+            );
           }
         },
         beforeOpen: (details) async {

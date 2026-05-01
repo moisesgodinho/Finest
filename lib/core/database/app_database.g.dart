@@ -1977,6 +1977,351 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   }
 }
 
+class $SubcategoriesTable extends Subcategories
+    with TableInfo<$SubcategoriesTable, Subcategory> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SubcategoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES users (id) ON DELETE CASCADE'));
+  static const VerificationMeta _categoryIdMeta =
+      const VerificationMeta('categoryId');
+  @override
+  late final GeneratedColumn<int> categoryId = GeneratedColumn<int>(
+      'category_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES categories (id) ON DELETE CASCADE'));
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      additionalChecks:
+          GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 80),
+      type: DriftSqlType.string,
+      requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, userId, categoryId, name, createdAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'subcategories';
+  @override
+  VerificationContext validateIntegrity(Insertable<Subcategory> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+          _categoryIdMeta,
+          categoryId.isAcceptableOrUnknown(
+              data['category_id']!, _categoryIdMeta));
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Subcategory map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Subcategory(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_id'])!,
+      categoryId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}category_id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $SubcategoriesTable createAlias(String alias) {
+    return $SubcategoriesTable(attachedDatabase, alias);
+  }
+}
+
+class Subcategory extends DataClass implements Insertable<Subcategory> {
+  final int id;
+  final int userId;
+  final int categoryId;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Subcategory(
+      {required this.id,
+      required this.userId,
+      required this.categoryId,
+      required this.name,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    map['category_id'] = Variable<int>(categoryId);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SubcategoriesCompanion toCompanion(bool nullToAbsent) {
+    return SubcategoriesCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      categoryId: Value(categoryId),
+      name: Value(name),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Subcategory.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Subcategory(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      categoryId: serializer.fromJson<int>(json['categoryId']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'categoryId': serializer.toJson<int>(categoryId),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Subcategory copyWith(
+          {int? id,
+          int? userId,
+          int? categoryId,
+          String? name,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Subcategory(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        categoryId: categoryId ?? this.categoryId,
+        name: name ?? this.name,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Subcategory copyWithCompanion(SubcategoriesCompanion data) {
+    return Subcategory(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      categoryId:
+          data.categoryId.present ? data.categoryId.value : this.categoryId,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Subcategory(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, userId, categoryId, name, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Subcategory &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.categoryId == this.categoryId &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SubcategoriesCompanion extends UpdateCompanion<Subcategory> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<int> categoryId;
+  final Value<String> name;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const SubcategoriesCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SubcategoriesCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    required int categoryId,
+    required String name,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : userId = Value(userId),
+        categoryId = Value(categoryId),
+        name = Value(name);
+  static Insertable<Subcategory> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<int>? categoryId,
+    Expression<String>? name,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (categoryId != null) 'category_id': categoryId,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SubcategoriesCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? userId,
+      Value<int>? categoryId,
+      Value<String>? name,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
+    return SubcategoriesCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      categoryId: categoryId ?? this.categoryId,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<int>(categoryId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubcategoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $FinancialTransactionsTable extends FinancialTransactions
     with TableInfo<$FinancialTransactionsTable, FinanceTransaction> {
   @override
@@ -2027,6 +2372,15 @@ class $FinancialTransactionsTable extends FinancialTransactions
       requiredDuringInsert: true,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'REFERENCES categories (id) ON DELETE RESTRICT'));
+  static const VerificationMeta _subcategoryIdMeta =
+      const VerificationMeta('subcategoryId');
+  @override
+  late final GeneratedColumn<int> subcategoryId = GeneratedColumn<int>(
+      'subcategory_id', aliasedName, true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES subcategories (id) ON DELETE SET NULL'));
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
   late final GeneratedColumn<String> type = GeneratedColumn<String>(
@@ -2054,6 +2408,12 @@ class $FinancialTransactionsTable extends FinancialTransactions
   late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
       'date', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _dueDateMeta =
+      const VerificationMeta('dueDate');
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+      'due_date', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _paymentMethodMeta =
       const VerificationMeta('paymentMethod');
   @override
@@ -2063,6 +2423,24 @@ class $FinancialTransactionsTable extends FinancialTransactions
           GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 40),
       type: DriftSqlType.string,
       requiredDuringInsert: true);
+  static const VerificationMeta _invoiceMonthMeta =
+      const VerificationMeta('invoiceMonth');
+  @override
+  late final GeneratedColumn<int> invoiceMonth = GeneratedColumn<int>(
+      'invoice_month', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _invoiceYearMeta =
+      const VerificationMeta('invoiceYear');
+  @override
+  late final GeneratedColumn<int> invoiceYear = GeneratedColumn<int>(
+      'invoice_year', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _expenseKindMeta =
+      const VerificationMeta('expenseKind');
+  @override
+  late final GeneratedColumn<String> expenseKind = GeneratedColumn<String>(
+      'expense_kind', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _installmentNumberMeta =
       const VerificationMeta('installmentNumber');
   @override
@@ -2075,6 +2453,15 @@ class $FinancialTransactionsTable extends FinancialTransactions
   late final GeneratedColumn<int> totalInstallments = GeneratedColumn<int>(
       'total_installments', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _isPaidMeta = const VerificationMeta('isPaid');
+  @override
+  late final GeneratedColumn<bool> isPaid = GeneratedColumn<bool>(
+      'is_paid', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_paid" IN (0, 1))'),
+      defaultValue: const Constant(true));
   static const VerificationMeta _isRecurringMeta =
       const VerificationMeta('isRecurring');
   @override
@@ -2108,13 +2495,19 @@ class $FinancialTransactionsTable extends FinancialTransactions
         accountId,
         creditCardId,
         categoryId,
+        subcategoryId,
         type,
         description,
         amount,
         date,
+        dueDate,
         paymentMethod,
+        invoiceMonth,
+        invoiceYear,
+        expenseKind,
         installmentNumber,
         totalInstallments,
+        isPaid,
         isRecurring,
         createdAt,
         updatedAt
@@ -2158,6 +2551,12 @@ class $FinancialTransactionsTable extends FinancialTransactions
     } else if (isInserting) {
       context.missing(_categoryIdMeta);
     }
+    if (data.containsKey('subcategory_id')) {
+      context.handle(
+          _subcategoryIdMeta,
+          subcategoryId.isAcceptableOrUnknown(
+              data['subcategory_id']!, _subcategoryIdMeta));
+    }
     if (data.containsKey('type')) {
       context.handle(
           _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
@@ -2184,6 +2583,10 @@ class $FinancialTransactionsTable extends FinancialTransactions
     } else if (isInserting) {
       context.missing(_dateMeta);
     }
+    if (data.containsKey('due_date')) {
+      context.handle(_dueDateMeta,
+          dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta));
+    }
     if (data.containsKey('payment_method')) {
       context.handle(
           _paymentMethodMeta,
@@ -2191,6 +2594,24 @@ class $FinancialTransactionsTable extends FinancialTransactions
               data['payment_method']!, _paymentMethodMeta));
     } else if (isInserting) {
       context.missing(_paymentMethodMeta);
+    }
+    if (data.containsKey('invoice_month')) {
+      context.handle(
+          _invoiceMonthMeta,
+          invoiceMonth.isAcceptableOrUnknown(
+              data['invoice_month']!, _invoiceMonthMeta));
+    }
+    if (data.containsKey('invoice_year')) {
+      context.handle(
+          _invoiceYearMeta,
+          invoiceYear.isAcceptableOrUnknown(
+              data['invoice_year']!, _invoiceYearMeta));
+    }
+    if (data.containsKey('expense_kind')) {
+      context.handle(
+          _expenseKindMeta,
+          expenseKind.isAcceptableOrUnknown(
+              data['expense_kind']!, _expenseKindMeta));
     }
     if (data.containsKey('installment_number')) {
       context.handle(
@@ -2203,6 +2624,10 @@ class $FinancialTransactionsTable extends FinancialTransactions
           _totalInstallmentsMeta,
           totalInstallments.isAcceptableOrUnknown(
               data['total_installments']!, _totalInstallmentsMeta));
+    }
+    if (data.containsKey('is_paid')) {
+      context.handle(_isPaidMeta,
+          isPaid.isAcceptableOrUnknown(data['is_paid']!, _isPaidMeta));
     }
     if (data.containsKey('is_recurring')) {
       context.handle(
@@ -2237,6 +2662,8 @@ class $FinancialTransactionsTable extends FinancialTransactions
           .read(DriftSqlType.int, data['${effectivePrefix}credit_card_id']),
       categoryId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}category_id'])!,
+      subcategoryId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}subcategory_id']),
       type: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
       description: attachedDatabase.typeMapping
@@ -2245,12 +2672,22 @@ class $FinancialTransactionsTable extends FinancialTransactions
           .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
       date: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      dueDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}due_date']),
       paymentMethod: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}payment_method'])!,
+      invoiceMonth: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}invoice_month']),
+      invoiceYear: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}invoice_year']),
+      expenseKind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}expense_kind']),
       installmentNumber: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}installment_number']),
       totalInstallments: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}total_installments']),
+      isPaid: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_paid'])!,
       isRecurring: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_recurring'])!,
       createdAt: attachedDatabase.typeMapping
@@ -2273,13 +2710,19 @@ class FinanceTransaction extends DataClass
   final int accountId;
   final int? creditCardId;
   final int categoryId;
+  final int? subcategoryId;
   final String type;
   final String description;
   final int amount;
   final DateTime date;
+  final DateTime? dueDate;
   final String paymentMethod;
+  final int? invoiceMonth;
+  final int? invoiceYear;
+  final String? expenseKind;
   final int? installmentNumber;
   final int? totalInstallments;
+  final bool isPaid;
   final bool isRecurring;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -2289,13 +2732,19 @@ class FinanceTransaction extends DataClass
       required this.accountId,
       this.creditCardId,
       required this.categoryId,
+      this.subcategoryId,
       required this.type,
       required this.description,
       required this.amount,
       required this.date,
+      this.dueDate,
       required this.paymentMethod,
+      this.invoiceMonth,
+      this.invoiceYear,
+      this.expenseKind,
       this.installmentNumber,
       this.totalInstallments,
+      required this.isPaid,
       required this.isRecurring,
       required this.createdAt,
       required this.updatedAt});
@@ -2309,17 +2758,33 @@ class FinanceTransaction extends DataClass
       map['credit_card_id'] = Variable<int>(creditCardId);
     }
     map['category_id'] = Variable<int>(categoryId);
+    if (!nullToAbsent || subcategoryId != null) {
+      map['subcategory_id'] = Variable<int>(subcategoryId);
+    }
     map['type'] = Variable<String>(type);
     map['description'] = Variable<String>(description);
     map['amount'] = Variable<int>(amount);
     map['date'] = Variable<DateTime>(date);
+    if (!nullToAbsent || dueDate != null) {
+      map['due_date'] = Variable<DateTime>(dueDate);
+    }
     map['payment_method'] = Variable<String>(paymentMethod);
+    if (!nullToAbsent || invoiceMonth != null) {
+      map['invoice_month'] = Variable<int>(invoiceMonth);
+    }
+    if (!nullToAbsent || invoiceYear != null) {
+      map['invoice_year'] = Variable<int>(invoiceYear);
+    }
+    if (!nullToAbsent || expenseKind != null) {
+      map['expense_kind'] = Variable<String>(expenseKind);
+    }
     if (!nullToAbsent || installmentNumber != null) {
       map['installment_number'] = Variable<int>(installmentNumber);
     }
     if (!nullToAbsent || totalInstallments != null) {
       map['total_installments'] = Variable<int>(totalInstallments);
     }
+    map['is_paid'] = Variable<bool>(isPaid);
     map['is_recurring'] = Variable<bool>(isRecurring);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2335,17 +2800,33 @@ class FinanceTransaction extends DataClass
           ? const Value.absent()
           : Value(creditCardId),
       categoryId: Value(categoryId),
+      subcategoryId: subcategoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subcategoryId),
       type: Value(type),
       description: Value(description),
       amount: Value(amount),
       date: Value(date),
+      dueDate: dueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDate),
       paymentMethod: Value(paymentMethod),
+      invoiceMonth: invoiceMonth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceMonth),
+      invoiceYear: invoiceYear == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceYear),
+      expenseKind: expenseKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expenseKind),
       installmentNumber: installmentNumber == null && nullToAbsent
           ? const Value.absent()
           : Value(installmentNumber),
       totalInstallments: totalInstallments == null && nullToAbsent
           ? const Value.absent()
           : Value(totalInstallments),
+      isPaid: Value(isPaid),
       isRecurring: Value(isRecurring),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -2361,13 +2842,19 @@ class FinanceTransaction extends DataClass
       accountId: serializer.fromJson<int>(json['accountId']),
       creditCardId: serializer.fromJson<int?>(json['creditCardId']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
+      subcategoryId: serializer.fromJson<int?>(json['subcategoryId']),
       type: serializer.fromJson<String>(json['type']),
       description: serializer.fromJson<String>(json['description']),
       amount: serializer.fromJson<int>(json['amount']),
       date: serializer.fromJson<DateTime>(json['date']),
+      dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
+      invoiceMonth: serializer.fromJson<int?>(json['invoiceMonth']),
+      invoiceYear: serializer.fromJson<int?>(json['invoiceYear']),
+      expenseKind: serializer.fromJson<String?>(json['expenseKind']),
       installmentNumber: serializer.fromJson<int?>(json['installmentNumber']),
       totalInstallments: serializer.fromJson<int?>(json['totalInstallments']),
+      isPaid: serializer.fromJson<bool>(json['isPaid']),
       isRecurring: serializer.fromJson<bool>(json['isRecurring']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -2382,13 +2869,19 @@ class FinanceTransaction extends DataClass
       'accountId': serializer.toJson<int>(accountId),
       'creditCardId': serializer.toJson<int?>(creditCardId),
       'categoryId': serializer.toJson<int>(categoryId),
+      'subcategoryId': serializer.toJson<int?>(subcategoryId),
       'type': serializer.toJson<String>(type),
       'description': serializer.toJson<String>(description),
       'amount': serializer.toJson<int>(amount),
       'date': serializer.toJson<DateTime>(date),
+      'dueDate': serializer.toJson<DateTime?>(dueDate),
       'paymentMethod': serializer.toJson<String>(paymentMethod),
+      'invoiceMonth': serializer.toJson<int?>(invoiceMonth),
+      'invoiceYear': serializer.toJson<int?>(invoiceYear),
+      'expenseKind': serializer.toJson<String?>(expenseKind),
       'installmentNumber': serializer.toJson<int?>(installmentNumber),
       'totalInstallments': serializer.toJson<int?>(totalInstallments),
+      'isPaid': serializer.toJson<bool>(isPaid),
       'isRecurring': serializer.toJson<bool>(isRecurring),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -2401,13 +2894,19 @@ class FinanceTransaction extends DataClass
           int? accountId,
           Value<int?> creditCardId = const Value.absent(),
           int? categoryId,
+          Value<int?> subcategoryId = const Value.absent(),
           String? type,
           String? description,
           int? amount,
           DateTime? date,
+          Value<DateTime?> dueDate = const Value.absent(),
           String? paymentMethod,
+          Value<int?> invoiceMonth = const Value.absent(),
+          Value<int?> invoiceYear = const Value.absent(),
+          Value<String?> expenseKind = const Value.absent(),
           Value<int?> installmentNumber = const Value.absent(),
           Value<int?> totalInstallments = const Value.absent(),
+          bool? isPaid,
           bool? isRecurring,
           DateTime? createdAt,
           DateTime? updatedAt}) =>
@@ -2418,17 +2917,25 @@ class FinanceTransaction extends DataClass
         creditCardId:
             creditCardId.present ? creditCardId.value : this.creditCardId,
         categoryId: categoryId ?? this.categoryId,
+        subcategoryId:
+            subcategoryId.present ? subcategoryId.value : this.subcategoryId,
         type: type ?? this.type,
         description: description ?? this.description,
         amount: amount ?? this.amount,
         date: date ?? this.date,
+        dueDate: dueDate.present ? dueDate.value : this.dueDate,
         paymentMethod: paymentMethod ?? this.paymentMethod,
+        invoiceMonth:
+            invoiceMonth.present ? invoiceMonth.value : this.invoiceMonth,
+        invoiceYear: invoiceYear.present ? invoiceYear.value : this.invoiceYear,
+        expenseKind: expenseKind.present ? expenseKind.value : this.expenseKind,
         installmentNumber: installmentNumber.present
             ? installmentNumber.value
             : this.installmentNumber,
         totalInstallments: totalInstallments.present
             ? totalInstallments.value
             : this.totalInstallments,
+        isPaid: isPaid ?? this.isPaid,
         isRecurring: isRecurring ?? this.isRecurring,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -2443,20 +2950,32 @@ class FinanceTransaction extends DataClass
           : this.creditCardId,
       categoryId:
           data.categoryId.present ? data.categoryId.value : this.categoryId,
+      subcategoryId: data.subcategoryId.present
+          ? data.subcategoryId.value
+          : this.subcategoryId,
       type: data.type.present ? data.type.value : this.type,
       description:
           data.description.present ? data.description.value : this.description,
       amount: data.amount.present ? data.amount.value : this.amount,
       date: data.date.present ? data.date.value : this.date,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       paymentMethod: data.paymentMethod.present
           ? data.paymentMethod.value
           : this.paymentMethod,
+      invoiceMonth: data.invoiceMonth.present
+          ? data.invoiceMonth.value
+          : this.invoiceMonth,
+      invoiceYear:
+          data.invoiceYear.present ? data.invoiceYear.value : this.invoiceYear,
+      expenseKind:
+          data.expenseKind.present ? data.expenseKind.value : this.expenseKind,
       installmentNumber: data.installmentNumber.present
           ? data.installmentNumber.value
           : this.installmentNumber,
       totalInstallments: data.totalInstallments.present
           ? data.totalInstallments.value
           : this.totalInstallments,
+      isPaid: data.isPaid.present ? data.isPaid.value : this.isPaid,
       isRecurring:
           data.isRecurring.present ? data.isRecurring.value : this.isRecurring,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -2472,13 +2991,19 @@ class FinanceTransaction extends DataClass
           ..write('accountId: $accountId, ')
           ..write('creditCardId: $creditCardId, ')
           ..write('categoryId: $categoryId, ')
+          ..write('subcategoryId: $subcategoryId, ')
           ..write('type: $type, ')
           ..write('description: $description, ')
           ..write('amount: $amount, ')
           ..write('date: $date, ')
+          ..write('dueDate: $dueDate, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('invoiceMonth: $invoiceMonth, ')
+          ..write('invoiceYear: $invoiceYear, ')
+          ..write('expenseKind: $expenseKind, ')
           ..write('installmentNumber: $installmentNumber, ')
           ..write('totalInstallments: $totalInstallments, ')
+          ..write('isPaid: $isPaid, ')
           ..write('isRecurring: $isRecurring, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -2487,22 +3012,29 @@ class FinanceTransaction extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      userId,
-      accountId,
-      creditCardId,
-      categoryId,
-      type,
-      description,
-      amount,
-      date,
-      paymentMethod,
-      installmentNumber,
-      totalInstallments,
-      isRecurring,
-      createdAt,
-      updatedAt);
+  int get hashCode => Object.hashAll([
+        id,
+        userId,
+        accountId,
+        creditCardId,
+        categoryId,
+        subcategoryId,
+        type,
+        description,
+        amount,
+        date,
+        dueDate,
+        paymentMethod,
+        invoiceMonth,
+        invoiceYear,
+        expenseKind,
+        installmentNumber,
+        totalInstallments,
+        isPaid,
+        isRecurring,
+        createdAt,
+        updatedAt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2512,13 +3044,19 @@ class FinanceTransaction extends DataClass
           other.accountId == this.accountId &&
           other.creditCardId == this.creditCardId &&
           other.categoryId == this.categoryId &&
+          other.subcategoryId == this.subcategoryId &&
           other.type == this.type &&
           other.description == this.description &&
           other.amount == this.amount &&
           other.date == this.date &&
+          other.dueDate == this.dueDate &&
           other.paymentMethod == this.paymentMethod &&
+          other.invoiceMonth == this.invoiceMonth &&
+          other.invoiceYear == this.invoiceYear &&
+          other.expenseKind == this.expenseKind &&
           other.installmentNumber == this.installmentNumber &&
           other.totalInstallments == this.totalInstallments &&
+          other.isPaid == this.isPaid &&
           other.isRecurring == this.isRecurring &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -2531,13 +3069,19 @@ class FinancialTransactionsCompanion
   final Value<int> accountId;
   final Value<int?> creditCardId;
   final Value<int> categoryId;
+  final Value<int?> subcategoryId;
   final Value<String> type;
   final Value<String> description;
   final Value<int> amount;
   final Value<DateTime> date;
+  final Value<DateTime?> dueDate;
   final Value<String> paymentMethod;
+  final Value<int?> invoiceMonth;
+  final Value<int?> invoiceYear;
+  final Value<String?> expenseKind;
   final Value<int?> installmentNumber;
   final Value<int?> totalInstallments;
+  final Value<bool> isPaid;
   final Value<bool> isRecurring;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -2547,13 +3091,19 @@ class FinancialTransactionsCompanion
     this.accountId = const Value.absent(),
     this.creditCardId = const Value.absent(),
     this.categoryId = const Value.absent(),
+    this.subcategoryId = const Value.absent(),
     this.type = const Value.absent(),
     this.description = const Value.absent(),
     this.amount = const Value.absent(),
     this.date = const Value.absent(),
+    this.dueDate = const Value.absent(),
     this.paymentMethod = const Value.absent(),
+    this.invoiceMonth = const Value.absent(),
+    this.invoiceYear = const Value.absent(),
+    this.expenseKind = const Value.absent(),
     this.installmentNumber = const Value.absent(),
     this.totalInstallments = const Value.absent(),
+    this.isPaid = const Value.absent(),
     this.isRecurring = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2564,13 +3114,19 @@ class FinancialTransactionsCompanion
     required int accountId,
     this.creditCardId = const Value.absent(),
     required int categoryId,
+    this.subcategoryId = const Value.absent(),
     required String type,
     required String description,
     required int amount,
     required DateTime date,
+    this.dueDate = const Value.absent(),
     required String paymentMethod,
+    this.invoiceMonth = const Value.absent(),
+    this.invoiceYear = const Value.absent(),
+    this.expenseKind = const Value.absent(),
     this.installmentNumber = const Value.absent(),
     this.totalInstallments = const Value.absent(),
+    this.isPaid = const Value.absent(),
     this.isRecurring = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2588,13 +3144,19 @@ class FinancialTransactionsCompanion
     Expression<int>? accountId,
     Expression<int>? creditCardId,
     Expression<int>? categoryId,
+    Expression<int>? subcategoryId,
     Expression<String>? type,
     Expression<String>? description,
     Expression<int>? amount,
     Expression<DateTime>? date,
+    Expression<DateTime>? dueDate,
     Expression<String>? paymentMethod,
+    Expression<int>? invoiceMonth,
+    Expression<int>? invoiceYear,
+    Expression<String>? expenseKind,
     Expression<int>? installmentNumber,
     Expression<int>? totalInstallments,
+    Expression<bool>? isPaid,
     Expression<bool>? isRecurring,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -2605,13 +3167,19 @@ class FinancialTransactionsCompanion
       if (accountId != null) 'account_id': accountId,
       if (creditCardId != null) 'credit_card_id': creditCardId,
       if (categoryId != null) 'category_id': categoryId,
+      if (subcategoryId != null) 'subcategory_id': subcategoryId,
       if (type != null) 'type': type,
       if (description != null) 'description': description,
       if (amount != null) 'amount': amount,
       if (date != null) 'date': date,
+      if (dueDate != null) 'due_date': dueDate,
       if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (invoiceMonth != null) 'invoice_month': invoiceMonth,
+      if (invoiceYear != null) 'invoice_year': invoiceYear,
+      if (expenseKind != null) 'expense_kind': expenseKind,
       if (installmentNumber != null) 'installment_number': installmentNumber,
       if (totalInstallments != null) 'total_installments': totalInstallments,
+      if (isPaid != null) 'is_paid': isPaid,
       if (isRecurring != null) 'is_recurring': isRecurring,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -2624,13 +3192,19 @@ class FinancialTransactionsCompanion
       Value<int>? accountId,
       Value<int?>? creditCardId,
       Value<int>? categoryId,
+      Value<int?>? subcategoryId,
       Value<String>? type,
       Value<String>? description,
       Value<int>? amount,
       Value<DateTime>? date,
+      Value<DateTime?>? dueDate,
       Value<String>? paymentMethod,
+      Value<int?>? invoiceMonth,
+      Value<int?>? invoiceYear,
+      Value<String?>? expenseKind,
       Value<int?>? installmentNumber,
       Value<int?>? totalInstallments,
+      Value<bool>? isPaid,
       Value<bool>? isRecurring,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt}) {
@@ -2640,13 +3214,19 @@ class FinancialTransactionsCompanion
       accountId: accountId ?? this.accountId,
       creditCardId: creditCardId ?? this.creditCardId,
       categoryId: categoryId ?? this.categoryId,
+      subcategoryId: subcategoryId ?? this.subcategoryId,
       type: type ?? this.type,
       description: description ?? this.description,
       amount: amount ?? this.amount,
       date: date ?? this.date,
+      dueDate: dueDate ?? this.dueDate,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      invoiceMonth: invoiceMonth ?? this.invoiceMonth,
+      invoiceYear: invoiceYear ?? this.invoiceYear,
+      expenseKind: expenseKind ?? this.expenseKind,
       installmentNumber: installmentNumber ?? this.installmentNumber,
       totalInstallments: totalInstallments ?? this.totalInstallments,
+      isPaid: isPaid ?? this.isPaid,
       isRecurring: isRecurring ?? this.isRecurring,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -2671,6 +3251,9 @@ class FinancialTransactionsCompanion
     if (categoryId.present) {
       map['category_id'] = Variable<int>(categoryId.value);
     }
+    if (subcategoryId.present) {
+      map['subcategory_id'] = Variable<int>(subcategoryId.value);
+    }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
     }
@@ -2683,14 +3266,29 @@ class FinancialTransactionsCompanion
     if (date.present) {
       map['date'] = Variable<DateTime>(date.value);
     }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
     if (paymentMethod.present) {
       map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (invoiceMonth.present) {
+      map['invoice_month'] = Variable<int>(invoiceMonth.value);
+    }
+    if (invoiceYear.present) {
+      map['invoice_year'] = Variable<int>(invoiceYear.value);
+    }
+    if (expenseKind.present) {
+      map['expense_kind'] = Variable<String>(expenseKind.value);
     }
     if (installmentNumber.present) {
       map['installment_number'] = Variable<int>(installmentNumber.value);
     }
     if (totalInstallments.present) {
       map['total_installments'] = Variable<int>(totalInstallments.value);
+    }
+    if (isPaid.present) {
+      map['is_paid'] = Variable<bool>(isPaid.value);
     }
     if (isRecurring.present) {
       map['is_recurring'] = Variable<bool>(isRecurring.value);
@@ -2712,13 +3310,19 @@ class FinancialTransactionsCompanion
           ..write('accountId: $accountId, ')
           ..write('creditCardId: $creditCardId, ')
           ..write('categoryId: $categoryId, ')
+          ..write('subcategoryId: $subcategoryId, ')
           ..write('type: $type, ')
           ..write('description: $description, ')
           ..write('amount: $amount, ')
           ..write('date: $date, ')
+          ..write('dueDate: $dueDate, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('invoiceMonth: $invoiceMonth, ')
+          ..write('invoiceYear: $invoiceYear, ')
+          ..write('expenseKind: $expenseKind, ')
           ..write('installmentNumber: $installmentNumber, ')
           ..write('totalInstallments: $totalInstallments, ')
+          ..write('isPaid: $isPaid, ')
           ..write('isRecurring: $isRecurring, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -4546,6 +5150,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AccountsTable accounts = $AccountsTable(this);
   late final $CreditCardsTable creditCards = $CreditCardsTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
+  late final $SubcategoriesTable subcategories = $SubcategoriesTable(this);
   late final $FinancialTransactionsTable financialTransactions =
       $FinancialTransactionsTable(this);
   late final $MonthlyPlansTable monthlyPlans = $MonthlyPlansTable(this);
@@ -4568,6 +5173,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         accounts,
         creditCards,
         categories,
+        subcategories,
         financialTransactions,
         monthlyPlans,
         investments,
@@ -4609,6 +5215,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
             on: TableUpdateQuery.onTableName('users',
                 limitUpdateKind: UpdateKind.delete),
             result: [
+              TableUpdate('subcategories', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('categories',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('subcategories', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('users',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
               TableUpdate('transactions', kind: UpdateKind.delete),
             ],
           ),
@@ -4621,6 +5241,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
           ),
           WritePropagation(
             on: TableUpdateQuery.onTableName('credit_cards',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('transactions', kind: UpdateKind.update),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('subcategories',
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('transactions', kind: UpdateKind.update),
@@ -4722,6 +5349,21 @@ final class $$UsersTableReferences
         .filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_categoriesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$SubcategoriesTable, List<Subcategory>>
+      _subcategoriesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.subcategories,
+              aliasName:
+                  $_aliasNameGenerator(db.users.id, db.subcategories.userId));
+
+  $$SubcategoriesTableProcessedTableManager get subcategoriesRefs {
+    final manager = $$SubcategoriesTableTableManager($_db, $_db.subcategories)
+        .filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_subcategoriesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -4880,6 +5522,27 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
             $$CategoriesTableFilterComposer(
               $db: $db,
               $table: $db.categories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> subcategoriesRefs(
+      Expression<bool> Function($$SubcategoriesTableFilterComposer f) f) {
+    final $$SubcategoriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.userId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableFilterComposer(
+              $db: $db,
+              $table: $db.subcategories,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -5108,6 +5771,27 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> subcategoriesRefs<T extends Object>(
+      Expression<T> Function($$SubcategoriesTableAnnotationComposer a) f) {
+    final $$SubcategoriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.userId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
   Expression<T> financialTransactionsRefs<T extends Object>(
       Expression<T> Function($$FinancialTransactionsTableAnnotationComposer a)
           f) {
@@ -5231,6 +5915,7 @@ class $$UsersTableTableManager extends RootTableManager<
         {bool accountsRefs,
         bool creditCardsRefs,
         bool categoriesRefs,
+        bool subcategoriesRefs,
         bool financialTransactionsRefs,
         bool monthlyPlansRefs,
         bool investmentsRefs,
@@ -5282,6 +5967,7 @@ class $$UsersTableTableManager extends RootTableManager<
               {accountsRefs = false,
               creditCardsRefs = false,
               categoriesRefs = false,
+              subcategoriesRefs = false,
               financialTransactionsRefs = false,
               monthlyPlansRefs = false,
               investmentsRefs = false,
@@ -5293,6 +5979,7 @@ class $$UsersTableTableManager extends RootTableManager<
                 if (accountsRefs) db.accounts,
                 if (creditCardsRefs) db.creditCards,
                 if (categoriesRefs) db.categories,
+                if (subcategoriesRefs) db.subcategories,
                 if (financialTransactionsRefs) db.financialTransactions,
                 if (monthlyPlansRefs) db.monthlyPlans,
                 if (investmentsRefs) db.investments,
@@ -5333,6 +6020,18 @@ class $$UsersTableTableManager extends RootTableManager<
                         managerFromTypedResult: (p0) =>
                             $$UsersTableReferences(db, table, p0)
                                 .categoriesRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.userId == item.id),
+                        typedResults: items),
+                  if (subcategoriesRefs)
+                    await $_getPrefetchedData<User, $UsersTable, Subcategory>(
+                        currentTable: table,
+                        referencedTable:
+                            $$UsersTableReferences._subcategoriesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$UsersTableReferences(db, table, p0)
+                                .subcategoriesRefs,
                         referencedItemsForCurrentItem: (item,
                                 referencedItems) =>
                             referencedItems.where((e) => e.userId == item.id),
@@ -5421,6 +6120,7 @@ typedef $$UsersTableProcessedTableManager = ProcessedTableManager<
         {bool accountsRefs,
         bool creditCardsRefs,
         bool categoriesRefs,
+        bool subcategoriesRefs,
         bool financialTransactionsRefs,
         bool monthlyPlansRefs,
         bool investmentsRefs,
@@ -6645,6 +7345,21 @@ final class $$CategoriesTableReferences
         manager.$state.copyWith(prefetchedData: [item]));
   }
 
+  static MultiTypedResultKey<$SubcategoriesTable, List<Subcategory>>
+      _subcategoriesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.subcategories,
+              aliasName: $_aliasNameGenerator(
+                  db.categories.id, db.subcategories.categoryId));
+
+  $$SubcategoriesTableProcessedTableManager get subcategoriesRefs {
+    final manager = $$SubcategoriesTableTableManager($_db, $_db.subcategories)
+        .filter((f) => f.categoryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_subcategoriesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
   static MultiTypedResultKey<$FinancialTransactionsTable,
       List<FinanceTransaction>> _financialTransactionsRefsTable(
           _$AppDatabase db) =>
@@ -6713,6 +7428,27 @@ class $$CategoriesTableFilterComposer
                   $removeJoinBuilderFromRootComposer,
             ));
     return composer;
+  }
+
+  Expression<bool> subcategoriesRefs(
+      Expression<bool> Function($$SubcategoriesTableFilterComposer f) f) {
+    final $$SubcategoriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.categoryId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableFilterComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
   }
 
   Expression<bool> financialTransactionsRefs(
@@ -6840,6 +7576,27 @@ class $$CategoriesTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> subcategoriesRefs<T extends Object>(
+      Expression<T> Function($$SubcategoriesTableAnnotationComposer a) f) {
+    final $$SubcategoriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.categoryId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
   Expression<T> financialTransactionsRefs<T extends Object>(
       Expression<T> Function($$FinancialTransactionsTableAnnotationComposer a)
           f) {
@@ -6875,7 +7632,10 @@ class $$CategoriesTableTableManager extends RootTableManager<
     $$CategoriesTableUpdateCompanionBuilder,
     (Category, $$CategoriesTableReferences),
     Category,
-    PrefetchHooks Function({bool userId, bool financialTransactionsRefs})> {
+    PrefetchHooks Function(
+        {bool userId,
+        bool subcategoriesRefs,
+        bool financialTransactionsRefs})> {
   $$CategoriesTableTableManager(_$AppDatabase db, $CategoriesTable table)
       : super(TableManagerState(
           db: db,
@@ -6933,10 +7693,13 @@ class $$CategoriesTableTableManager extends RootTableManager<
                   ))
               .toList(),
           prefetchHooksCallback: (
-              {userId = false, financialTransactionsRefs = false}) {
+              {userId = false,
+              subcategoriesRefs = false,
+              financialTransactionsRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
+                if (subcategoriesRefs) db.subcategories,
                 if (financialTransactionsRefs) db.financialTransactions
               ],
               addJoins: <
@@ -6967,6 +7730,19 @@ class $$CategoriesTableTableManager extends RootTableManager<
               },
               getPrefetchedDataCallback: (items) async {
                 return [
+                  if (subcategoriesRefs)
+                    await $_getPrefetchedData<Category, $CategoriesTable,
+                            Subcategory>(
+                        currentTable: table,
+                        referencedTable: $$CategoriesTableReferences
+                            ._subcategoriesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$CategoriesTableReferences(db, table, p0)
+                                .subcategoriesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.categoryId == item.id),
+                        typedResults: items),
                   if (financialTransactionsRefs)
                     await $_getPrefetchedData<Category, $CategoriesTable,
                             FinanceTransaction>(
@@ -6998,7 +7774,454 @@ typedef $$CategoriesTableProcessedTableManager = ProcessedTableManager<
     $$CategoriesTableUpdateCompanionBuilder,
     (Category, $$CategoriesTableReferences),
     Category,
-    PrefetchHooks Function({bool userId, bool financialTransactionsRefs})>;
+    PrefetchHooks Function(
+        {bool userId, bool subcategoriesRefs, bool financialTransactionsRefs})>;
+typedef $$SubcategoriesTableCreateCompanionBuilder = SubcategoriesCompanion
+    Function({
+  Value<int> id,
+  required int userId,
+  required int categoryId,
+  required String name,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+});
+typedef $$SubcategoriesTableUpdateCompanionBuilder = SubcategoriesCompanion
+    Function({
+  Value<int> id,
+  Value<int> userId,
+  Value<int> categoryId,
+  Value<String> name,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+});
+
+final class $$SubcategoriesTableReferences
+    extends BaseReferences<_$AppDatabase, $SubcategoriesTable, Subcategory> {
+  $$SubcategoriesTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users
+      .createAlias($_aliasNameGenerator(db.subcategories.userId, db.users.id));
+
+  $$UsersTableProcessedTableManager get userId {
+    final $_column = $_itemColumn<int>('user_id')!;
+
+    final manager = $$UsersTableTableManager($_db, $_db.users)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $CategoriesTable _categoryIdTable(_$AppDatabase db) =>
+      db.categories.createAlias(
+          $_aliasNameGenerator(db.subcategories.categoryId, db.categories.id));
+
+  $$CategoriesTableProcessedTableManager get categoryId {
+    final $_column = $_itemColumn<int>('category_id')!;
+
+    final manager = $$CategoriesTableTableManager($_db, $_db.categories)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static MultiTypedResultKey<$FinancialTransactionsTable,
+      List<FinanceTransaction>> _financialTransactionsRefsTable(
+          _$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(db.financialTransactions,
+          aliasName: $_aliasNameGenerator(
+              db.subcategories.id, db.financialTransactions.subcategoryId));
+
+  $$FinancialTransactionsTableProcessedTableManager
+      get financialTransactionsRefs {
+    final manager = $$FinancialTransactionsTableTableManager(
+            $_db, $_db.financialTransactions)
+        .filter((f) => f.subcategoryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_financialTransactionsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$SubcategoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $SubcategoriesTable> {
+  $$SubcategoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableFilterComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CategoriesTableFilterComposer get categoryId {
+    final $$CategoriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.categoryId,
+        referencedTable: $db.categories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CategoriesTableFilterComposer(
+              $db: $db,
+              $table: $db.categories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  Expression<bool> financialTransactionsRefs(
+      Expression<bool> Function($$FinancialTransactionsTableFilterComposer f)
+          f) {
+    final $$FinancialTransactionsTableFilterComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.financialTransactions,
+            getReferencedColumn: (t) => t.subcategoryId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$FinancialTransactionsTableFilterComposer(
+                  $db: $db,
+                  $table: $db.financialTransactions,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
+}
+
+class $$SubcategoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SubcategoriesTable> {
+  $$SubcategoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableOrderingComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CategoriesTableOrderingComposer get categoryId {
+    final $$CategoriesTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.categoryId,
+        referencedTable: $db.categories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CategoriesTableOrderingComposer(
+              $db: $db,
+              $table: $db.categories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$SubcategoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SubcategoriesTable> {
+  $$SubcategoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$CategoriesTableAnnotationComposer get categoryId {
+    final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.categoryId,
+        referencedTable: $db.categories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CategoriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.categories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  Expression<T> financialTransactionsRefs<T extends Object>(
+      Expression<T> Function($$FinancialTransactionsTableAnnotationComposer a)
+          f) {
+    final $$FinancialTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.financialTransactions,
+            getReferencedColumn: (t) => t.subcategoryId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$FinancialTransactionsTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.financialTransactions,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
+}
+
+class $$SubcategoriesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SubcategoriesTable,
+    Subcategory,
+    $$SubcategoriesTableFilterComposer,
+    $$SubcategoriesTableOrderingComposer,
+    $$SubcategoriesTableAnnotationComposer,
+    $$SubcategoriesTableCreateCompanionBuilder,
+    $$SubcategoriesTableUpdateCompanionBuilder,
+    (Subcategory, $$SubcategoriesTableReferences),
+    Subcategory,
+    PrefetchHooks Function(
+        {bool userId, bool categoryId, bool financialTransactionsRefs})> {
+  $$SubcategoriesTableTableManager(_$AppDatabase db, $SubcategoriesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SubcategoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SubcategoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SubcategoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> userId = const Value.absent(),
+            Value<int> categoryId = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+          }) =>
+              SubcategoriesCompanion(
+            id: id,
+            userId: userId,
+            categoryId: categoryId,
+            name: name,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int userId,
+            required int categoryId,
+            required String name,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+          }) =>
+              SubcategoriesCompanion.insert(
+            id: id,
+            userId: userId,
+            categoryId: categoryId,
+            name: name,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$SubcategoriesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: (
+              {userId = false,
+              categoryId = false,
+              financialTransactionsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (financialTransactionsRefs) db.financialTransactions
+              ],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (userId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.userId,
+                    referencedTable:
+                        $$SubcategoriesTableReferences._userIdTable(db),
+                    referencedColumn:
+                        $$SubcategoriesTableReferences._userIdTable(db).id,
+                  ) as T;
+                }
+                if (categoryId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.categoryId,
+                    referencedTable:
+                        $$SubcategoriesTableReferences._categoryIdTable(db),
+                    referencedColumn:
+                        $$SubcategoriesTableReferences._categoryIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (financialTransactionsRefs)
+                    await $_getPrefetchedData<Subcategory, $SubcategoriesTable,
+                            FinanceTransaction>(
+                        currentTable: table,
+                        referencedTable: $$SubcategoriesTableReferences
+                            ._financialTransactionsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$SubcategoriesTableReferences(db, table, p0)
+                                .financialTransactionsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.subcategoryId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$SubcategoriesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $SubcategoriesTable,
+    Subcategory,
+    $$SubcategoriesTableFilterComposer,
+    $$SubcategoriesTableOrderingComposer,
+    $$SubcategoriesTableAnnotationComposer,
+    $$SubcategoriesTableCreateCompanionBuilder,
+    $$SubcategoriesTableUpdateCompanionBuilder,
+    (Subcategory, $$SubcategoriesTableReferences),
+    Subcategory,
+    PrefetchHooks Function(
+        {bool userId, bool categoryId, bool financialTransactionsRefs})>;
 typedef $$FinancialTransactionsTableCreateCompanionBuilder
     = FinancialTransactionsCompanion Function({
   Value<int> id,
@@ -7006,13 +8229,19 @@ typedef $$FinancialTransactionsTableCreateCompanionBuilder
   required int accountId,
   Value<int?> creditCardId,
   required int categoryId,
+  Value<int?> subcategoryId,
   required String type,
   required String description,
   required int amount,
   required DateTime date,
+  Value<DateTime?> dueDate,
   required String paymentMethod,
+  Value<int?> invoiceMonth,
+  Value<int?> invoiceYear,
+  Value<String?> expenseKind,
   Value<int?> installmentNumber,
   Value<int?> totalInstallments,
+  Value<bool> isPaid,
   Value<bool> isRecurring,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -7024,13 +8253,19 @@ typedef $$FinancialTransactionsTableUpdateCompanionBuilder
   Value<int> accountId,
   Value<int?> creditCardId,
   Value<int> categoryId,
+  Value<int?> subcategoryId,
   Value<String> type,
   Value<String> description,
   Value<int> amount,
   Value<DateTime> date,
+  Value<DateTime?> dueDate,
   Value<String> paymentMethod,
+  Value<int?> invoiceMonth,
+  Value<int?> invoiceYear,
+  Value<String?> expenseKind,
   Value<int?> installmentNumber,
   Value<int?> totalInstallments,
+  Value<bool> isPaid,
   Value<bool> isRecurring,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -7099,6 +8334,21 @@ final class $$FinancialTransactionsTableReferences extends BaseReferences<
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
   }
+
+  static $SubcategoriesTable _subcategoryIdTable(_$AppDatabase db) =>
+      db.subcategories.createAlias($_aliasNameGenerator(
+          db.financialTransactions.subcategoryId, db.subcategories.id));
+
+  $$SubcategoriesTableProcessedTableManager? get subcategoryId {
+    final $_column = $_itemColumn<int>('subcategory_id');
+    if ($_column == null) return null;
+    final manager = $$SubcategoriesTableTableManager($_db, $_db.subcategories)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_subcategoryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
 }
 
 class $$FinancialTransactionsTableFilterComposer
@@ -7125,8 +8375,20 @@ class $$FinancialTransactionsTableFilterComposer
   ColumnFilters<DateTime> get date => $composableBuilder(
       column: $table.date, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+      column: $table.dueDate, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get paymentMethod => $composableBuilder(
       column: $table.paymentMethod, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get invoiceMonth => $composableBuilder(
+      column: $table.invoiceMonth, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get invoiceYear => $composableBuilder(
+      column: $table.invoiceYear, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get expenseKind => $composableBuilder(
+      column: $table.expenseKind, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber,
@@ -7135,6 +8397,9 @@ class $$FinancialTransactionsTableFilterComposer
   ColumnFilters<int> get totalInstallments => $composableBuilder(
       column: $table.totalInstallments,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isPaid => $composableBuilder(
+      column: $table.isPaid, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isRecurring => $composableBuilder(
       column: $table.isRecurring, builder: (column) => ColumnFilters(column));
@@ -7224,6 +8489,26 @@ class $$FinancialTransactionsTableFilterComposer
             ));
     return composer;
   }
+
+  $$SubcategoriesTableFilterComposer get subcategoryId {
+    final $$SubcategoriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subcategoryId,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableFilterComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$FinancialTransactionsTableOrderingComposer
@@ -7250,9 +8535,22 @@ class $$FinancialTransactionsTableOrderingComposer
   ColumnOrderings<DateTime> get date => $composableBuilder(
       column: $table.date, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+      column: $table.dueDate, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get paymentMethod => $composableBuilder(
       column: $table.paymentMethod,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get invoiceMonth => $composableBuilder(
+      column: $table.invoiceMonth,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get invoiceYear => $composableBuilder(
+      column: $table.invoiceYear, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get expenseKind => $composableBuilder(
+      column: $table.expenseKind, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber,
@@ -7261,6 +8559,9 @@ class $$FinancialTransactionsTableOrderingComposer
   ColumnOrderings<int> get totalInstallments => $composableBuilder(
       column: $table.totalInstallments,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isPaid => $composableBuilder(
+      column: $table.isPaid, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get isRecurring => $composableBuilder(
       column: $table.isRecurring, builder: (column) => ColumnOrderings(column));
@@ -7350,6 +8651,26 @@ class $$FinancialTransactionsTableOrderingComposer
             ));
     return composer;
   }
+
+  $$SubcategoriesTableOrderingComposer get subcategoryId {
+    final $$SubcategoriesTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subcategoryId,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableOrderingComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$FinancialTransactionsTableAnnotationComposer
@@ -7376,14 +8697,29 @@ class $$FinancialTransactionsTableAnnotationComposer
   GeneratedColumn<DateTime> get date =>
       $composableBuilder(column: $table.date, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
   GeneratedColumn<String> get paymentMethod => $composableBuilder(
       column: $table.paymentMethod, builder: (column) => column);
+
+  GeneratedColumn<int> get invoiceMonth => $composableBuilder(
+      column: $table.invoiceMonth, builder: (column) => column);
+
+  GeneratedColumn<int> get invoiceYear => $composableBuilder(
+      column: $table.invoiceYear, builder: (column) => column);
+
+  GeneratedColumn<String> get expenseKind => $composableBuilder(
+      column: $table.expenseKind, builder: (column) => column);
 
   GeneratedColumn<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber, builder: (column) => column);
 
   GeneratedColumn<int> get totalInstallments => $composableBuilder(
       column: $table.totalInstallments, builder: (column) => column);
+
+  GeneratedColumn<bool> get isPaid =>
+      $composableBuilder(column: $table.isPaid, builder: (column) => column);
 
   GeneratedColumn<bool> get isRecurring => $composableBuilder(
       column: $table.isRecurring, builder: (column) => column);
@@ -7473,6 +8809,26 @@ class $$FinancialTransactionsTableAnnotationComposer
             ));
     return composer;
   }
+
+  $$SubcategoriesTableAnnotationComposer get subcategoryId {
+    final $$SubcategoriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subcategoryId,
+        referencedTable: $db.subcategories,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubcategoriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.subcategories,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$FinancialTransactionsTableTableManager extends RootTableManager<
@@ -7487,7 +8843,11 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
     (FinanceTransaction, $$FinancialTransactionsTableReferences),
     FinanceTransaction,
     PrefetchHooks Function(
-        {bool userId, bool accountId, bool creditCardId, bool categoryId})> {
+        {bool userId,
+        bool accountId,
+        bool creditCardId,
+        bool categoryId,
+        bool subcategoryId})> {
   $$FinancialTransactionsTableTableManager(
       _$AppDatabase db, $FinancialTransactionsTable table)
       : super(TableManagerState(
@@ -7508,13 +8868,19 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
             Value<int> accountId = const Value.absent(),
             Value<int?> creditCardId = const Value.absent(),
             Value<int> categoryId = const Value.absent(),
+            Value<int?> subcategoryId = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<String> description = const Value.absent(),
             Value<int> amount = const Value.absent(),
             Value<DateTime> date = const Value.absent(),
+            Value<DateTime?> dueDate = const Value.absent(),
             Value<String> paymentMethod = const Value.absent(),
+            Value<int?> invoiceMonth = const Value.absent(),
+            Value<int?> invoiceYear = const Value.absent(),
+            Value<String?> expenseKind = const Value.absent(),
             Value<int?> installmentNumber = const Value.absent(),
             Value<int?> totalInstallments = const Value.absent(),
+            Value<bool> isPaid = const Value.absent(),
             Value<bool> isRecurring = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -7525,13 +8891,19 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
             accountId: accountId,
             creditCardId: creditCardId,
             categoryId: categoryId,
+            subcategoryId: subcategoryId,
             type: type,
             description: description,
             amount: amount,
             date: date,
+            dueDate: dueDate,
             paymentMethod: paymentMethod,
+            invoiceMonth: invoiceMonth,
+            invoiceYear: invoiceYear,
+            expenseKind: expenseKind,
             installmentNumber: installmentNumber,
             totalInstallments: totalInstallments,
+            isPaid: isPaid,
             isRecurring: isRecurring,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -7542,13 +8914,19 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
             required int accountId,
             Value<int?> creditCardId = const Value.absent(),
             required int categoryId,
+            Value<int?> subcategoryId = const Value.absent(),
             required String type,
             required String description,
             required int amount,
             required DateTime date,
+            Value<DateTime?> dueDate = const Value.absent(),
             required String paymentMethod,
+            Value<int?> invoiceMonth = const Value.absent(),
+            Value<int?> invoiceYear = const Value.absent(),
+            Value<String?> expenseKind = const Value.absent(),
             Value<int?> installmentNumber = const Value.absent(),
             Value<int?> totalInstallments = const Value.absent(),
+            Value<bool> isPaid = const Value.absent(),
             Value<bool> isRecurring = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -7559,13 +8937,19 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
             accountId: accountId,
             creditCardId: creditCardId,
             categoryId: categoryId,
+            subcategoryId: subcategoryId,
             type: type,
             description: description,
             amount: amount,
             date: date,
+            dueDate: dueDate,
             paymentMethod: paymentMethod,
+            invoiceMonth: invoiceMonth,
+            invoiceYear: invoiceYear,
+            expenseKind: expenseKind,
             installmentNumber: installmentNumber,
             totalInstallments: totalInstallments,
+            isPaid: isPaid,
             isRecurring: isRecurring,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -7580,7 +8964,8 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
               {userId = false,
               accountId = false,
               creditCardId = false,
-              categoryId = false}) {
+              categoryId = false,
+              subcategoryId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -7641,6 +9026,17 @@ class $$FinancialTransactionsTableTableManager extends RootTableManager<
                         .id,
                   ) as T;
                 }
+                if (subcategoryId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.subcategoryId,
+                    referencedTable: $$FinancialTransactionsTableReferences
+                        ._subcategoryIdTable(db),
+                    referencedColumn: $$FinancialTransactionsTableReferences
+                        ._subcategoryIdTable(db)
+                        .id,
+                  ) as T;
+                }
 
                 return state;
               },
@@ -7665,7 +9061,11 @@ typedef $$FinancialTransactionsTableProcessedTableManager
         (FinanceTransaction, $$FinancialTransactionsTableReferences),
         FinanceTransaction,
         PrefetchHooks Function(
-            {bool userId, bool accountId, bool creditCardId, bool categoryId})>;
+            {bool userId,
+            bool accountId,
+            bool creditCardId,
+            bool categoryId,
+            bool subcategoryId})>;
 typedef $$MonthlyPlansTableCreateCompanionBuilder = MonthlyPlansCompanion
     Function({
   Value<int> id,
@@ -9058,6 +10458,8 @@ class $AppDatabaseManager {
       $$CreditCardsTableTableManager(_db, _db.creditCards);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db, _db.categories);
+  $$SubcategoriesTableTableManager get subcategories =>
+      $$SubcategoriesTableTableManager(_db, _db.subcategories);
   $$FinancialTransactionsTableTableManager get financialTransactions =>
       $$FinancialTransactionsTableTableManager(_db, _db.financialTransactions);
   $$MonthlyPlansTableTableManager get monthlyPlans =>

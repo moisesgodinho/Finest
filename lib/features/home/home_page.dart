@@ -15,7 +15,10 @@ import '../accounts/accounts_page.dart';
 import '../cards/cards_page.dart';
 import '../planning/planning_page.dart';
 import '../settings/settings_page.dart';
+import 'card_expense_form_sheet.dart';
+import 'expense_form_sheet.dart';
 import 'home_view_model.dart';
+import 'income_form_sheet.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -43,7 +46,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       floatingActionButton: _currentIndex == 4
           ? null
           : FloatingActionButton(
-              onPressed: () => context.push(AppRoutes.transactions),
+              onPressed: _openCreateActionMenu,
               child: const Icon(Icons.add_rounded, size: 34),
             ),
       bottomNavigationBar: FinancePetBottomNavBar(
@@ -52,6 +55,172 @@ class _HomePageState extends ConsumerState<HomePage> {
           setState(() => _currentIndex = index);
         },
       ),
+    );
+  }
+
+  Future<void> _openCreateActionMenu() async {
+    final action = await showModalBottomSheet<_CreateAction>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Adicionar',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+                _CreateActionTile(
+                  icon: Icons.trending_up_rounded,
+                  color: AppColors.success,
+                  title: 'Receita',
+                  subtitle: 'Entrada em conta',
+                  action: _CreateAction.income,
+                ),
+                _CreateActionTile(
+                  icon: Icons.remove_rounded,
+                  color: AppColors.danger,
+                  title: 'Despesa',
+                  subtitle: 'Saída direto da conta',
+                  action: _CreateAction.expense,
+                ),
+                _CreateActionTile(
+                  icon: Icons.credit_card_rounded,
+                  color: AppColors.info,
+                  title: 'Despesa no cartão',
+                  subtitle: 'Compra para a fatura',
+                  action: _CreateAction.cardExpense,
+                ),
+                _CreateActionTile(
+                  icon: Icons.swap_horiz_rounded,
+                  color: AppColors.warning,
+                  title: 'Transferência',
+                  subtitle: 'Mover valor entre contas',
+                  action: _CreateAction.transfer,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) {
+      return;
+    }
+
+    switch (action) {
+      case _CreateAction.income:
+        await _openIncomeForm();
+      case _CreateAction.expense:
+        await _openExpenseForm();
+      case _CreateAction.cardExpense:
+        await _openCardExpenseForm();
+      case _CreateAction.transfer:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Este formulário entra na próxima etapa.'),
+          ),
+        );
+    }
+  }
+
+  Future<void> _openIncomeForm() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => const IncomeFormSheet(),
+    );
+
+    if (mounted && saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Receita salva.')),
+      );
+    }
+  }
+
+  Future<void> _openExpenseForm() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => const ExpenseFormSheet(),
+    );
+
+    if (mounted && saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Despesa salva.')),
+      );
+    }
+  }
+
+  Future<void> _openCardExpenseForm() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => const CardExpenseFormSheet(),
+    );
+
+    if (mounted && saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Despesa no cartão salva.')),
+      );
+    }
+  }
+}
+
+enum _CreateAction { income, expense, cardExpense, transfer }
+
+class _CreateActionTile extends StatelessWidget {
+  const _CreateActionTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.action,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final _CreateAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.12),
+        foregroundColor: color,
+        child: Icon(icon),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => Navigator.of(context).pop(action),
     );
   }
 }

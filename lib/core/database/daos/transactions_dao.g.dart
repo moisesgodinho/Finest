@@ -8,6 +8,7 @@ mixin _$TransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $AccountsTable get accounts => attachedDatabase.accounts;
   $CreditCardsTable get creditCards => attachedDatabase.creditCards;
   $CategoriesTable get categories => attachedDatabase.categories;
+  $SubcategoriesTable get subcategories => attachedDatabase.subcategories;
   $FinancialTransactionsTable get financialTransactions =>
       attachedDatabase.financialTransactions;
   TransactionsDaoManager get managers => TransactionsDaoManager(this);
@@ -24,6 +25,8 @@ class TransactionsDaoManager {
       $$CreditCardsTableTableManager(_db.attachedDatabase, _db.creditCards);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
+  $$SubcategoriesTableTableManager get subcategories =>
+      $$SubcategoriesTableTableManager(_db.attachedDatabase, _db.subcategories);
   $$FinancialTransactionsTableTableManager get financialTransactions =>
       $$FinancialTransactionsTableTableManager(
           _db.attachedDatabase, _db.financialTransactions);

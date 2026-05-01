@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../models/category_model.dart';
+import '../models/subcategory_model.dart';
 
 abstract class CategoryRepository {
   Stream<List<CategoryModel>> watchCategories(int userId);
@@ -14,6 +15,24 @@ abstract class CategoryRepository {
   Future<List<CategoryModel>> findCategoriesByType({
     required int userId,
     required String type,
+  });
+
+  Stream<List<SubcategoryModel>> watchSubcategories(int userId);
+
+  Future<int> createExpenseCategory({
+    required int userId,
+    required String name,
+  });
+
+  Future<int> createIncomeCategory({
+    required int userId,
+    required String name,
+  });
+
+  Future<int> createSubcategory({
+    required int userId,
+    required int categoryId,
+    required String name,
   });
 
   Future<void> ensureDefaultCategories(int userId);
@@ -50,6 +69,98 @@ class DriftCategoryRepository implements CategoryRepository {
   }
 
   @override
+  Stream<List<SubcategoryModel>> watchSubcategories(int userId) {
+    return _database.categoriesDao.watchSubcategoriesByUser(userId).map(
+          (subcategories) => subcategories.map(_mapSubcategory).toList(),
+        );
+  }
+
+  @override
+  Future<int> createExpenseCategory({
+    required int userId,
+    required String name,
+  }) {
+    return _createCategory(
+      userId: userId,
+      name: name,
+      type: 'expense',
+      icon: 'category',
+      color: '#006B4F',
+    );
+  }
+
+  @override
+  Future<int> createIncomeCategory({
+    required int userId,
+    required String name,
+  }) {
+    return _createCategory(
+      userId: userId,
+      name: name,
+      type: 'income',
+      icon: 'income',
+      color: '#0A8F4D',
+    );
+  }
+
+  Future<int> _createCategory({
+    required int userId,
+    required String name,
+    required String type,
+    required String icon,
+    required String color,
+  }) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Informe o nome da categoria.');
+    }
+
+    final now = DateTime.now();
+    return _database.categoriesDao.insertCategory(
+      CategoriesCompanion.insert(
+        userId: userId,
+        name: trimmedName,
+        type: type,
+        icon: Value(icon),
+        color: Value(color),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  @override
+  Future<int> createSubcategory({
+    required int userId,
+    required int categoryId,
+    required String name,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Informe o nome da subcategoria.');
+    }
+
+    final category = await _database.categoriesDao.findByIdForUser(
+      id: categoryId,
+      userId: userId,
+    );
+    if (category == null) {
+      throw StateError('Categoria não encontrada.');
+    }
+
+    final now = DateTime.now();
+    return _database.categoriesDao.insertSubcategory(
+      SubcategoriesCompanion.insert(
+        userId: userId,
+        categoryId: categoryId,
+        name: trimmedName,
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  @override
   Future<void> ensureDefaultCategories(int userId) async {
     final existingCount = await _database.categoriesDao.countByUser(userId);
     if (existingCount > 0) {
@@ -79,6 +190,15 @@ class DriftCategoryRepository implements CategoryRepository {
       icon: _iconFromName(category.icon),
       color: _colorFromHex(category.color),
       colorHex: category.color,
+    );
+  }
+
+  SubcategoryModel _mapSubcategory(Subcategory subcategory) {
+    return SubcategoryModel(
+      id: subcategory.id,
+      userId: subcategory.userId,
+      categoryId: subcategory.categoryId,
+      name: subcategory.name,
     );
   }
 
