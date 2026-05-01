@@ -8,6 +8,7 @@ class TransactionPreview {
     required this.icon,
     required this.iconColor,
     this.isIncome = false,
+    this.isPaid = true,
   });
 
   final String title;
@@ -16,4 +17,5 @@ class TransactionPreview {
   final IconData icon;
   final Color iconColor;
   final bool isIncome;
+  final bool isPaid;
 }

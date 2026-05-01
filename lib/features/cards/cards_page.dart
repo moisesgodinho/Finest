@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,9 +6,11 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../core/utils/date_utils.dart';
 import '../../data/models/account_preview.dart';
+import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../shared/widgets/section_card.dart';
 import 'cards_view_model.dart';
+import 'credit_card_invoice_page.dart';
 
 class CardsPage extends ConsumerWidget {
   const CardsPage({super.key});
@@ -72,7 +74,8 @@ class CardsPage extends ConsumerWidget {
                 ),
                 _CardsMetric(
                   title: 'Próximos vencimentos',
-                  value: '${state.cards.length} cartões',
+                  value:
+                      '${state.invoices.where((invoice) => !invoice.isPaid).length} faturas',
                   icon: Icons.calendar_month_rounded,
                 ),
               ],
@@ -92,7 +95,11 @@ class CardsPage extends ConsumerWidget {
                         for (final card in state.cards)
                           _CreditCardTile(
                             card: card,
-                            onTap: () => _openCardForm(
+                            onTap: () => _openCardInvoice(
+                              context,
+                              state.invoiceForCard(card),
+                            ),
+                            onEdit: () => _openCardForm(
                               context,
                               ref,
                               card: card,
@@ -105,6 +112,35 @@ class CardsPage extends ConsumerWidget {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCardInvoice(
+    BuildContext context,
+    CreditCardInvoicePreview invoice,
+  ) async {
+    await _openInvoicePage(
+      context,
+      cardId: invoice.cardId,
+      month: invoice.month,
+      year: invoice.year,
+    );
+  }
+
+  Future<void> _openInvoicePage(
+    BuildContext context, {
+    required int cardId,
+    required int month,
+    required int year,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => CreditCardInvoicePage(
+          cardId: cardId,
+          initialMonth: month,
+          initialYear: year,
         ),
       ),
     );
@@ -590,12 +626,14 @@ class _CreditCardTile extends StatelessWidget {
   const _CreditCardTile({
     required this.card,
     required this.onTap,
+    required this.onEdit,
     required this.onPay,
     required this.onDelete,
   });
 
   final CreditCardPreview card;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onPay;
   final VoidCallback onDelete;
 
@@ -702,7 +740,7 @@ class _CreditCardTile extends StatelessWidget {
               onSelected: (action) {
                 switch (action) {
                   case _CardAction.edit:
-                    onTap();
+                    onEdit();
                   case _CardAction.pay:
                     onPay();
                   case _CardAction.delete:

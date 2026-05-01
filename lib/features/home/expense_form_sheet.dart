@@ -29,14 +29,18 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
   int? _selectedSubcategoryId;
   int? _pendingCategoryId;
   int? _pendingSubcategoryId;
+  late DateTime _dueDate;
   late DateTime _date;
+  bool _isPaid = true;
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
     _nameController.addListener(_handleNameChanged);
-    _date = DateTime.now();
+    final now = DateTime.now();
+    _dueDate = now;
+    _date = now;
   }
 
   @override
@@ -192,6 +196,30 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
                   ),
                 ],
                 const SizedBox(height: 14),
+                InkWell(
+                  onTap: () => _pickDate(isDueDate: true),
+                  borderRadius: BorderRadius.circular(16),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Data de vencimento',
+                      prefixIcon: Icon(Icons.event_available_rounded),
+                    ),
+                    child: Text(_formatDate(_dueDate)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  value: _isPaid,
+                  title: const Text('Despesa efetivada'),
+                  subtitle: Text(
+                    _isPaid
+                        ? 'A despesa sai do saldo da conta ao salvar.'
+                        : 'A despesa fica prevista e não altera o saldo agora.',
+                  ),
+                  onChanged: (value) => setState(() => _isPaid = value),
+                ),
+                const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
                   initialValue: _selectedAccountId,
                   decoration: const InputDecoration(
@@ -257,7 +285,7 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
                 ),
                 const SizedBox(height: 14),
                 InkWell(
-                  onTap: _pickDate,
+                  onTap: () => _pickDate(isDueDate: false),
                   borderRadius: BorderRadius.circular(16),
                   child: InputDecorator(
                     decoration: const InputDecoration(
@@ -384,15 +412,22 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
     return '';
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDate({required bool isDueDate}) async {
+    final currentDate = isDueDate ? _dueDate : _date;
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: currentDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(DateTime.now().year + 5),
     );
     if (pickedDate != null) {
-      setState(() => _date = pickedDate);
+      setState(() {
+        if (isDueDate) {
+          _dueDate = pickedDate;
+        } else {
+          _date = pickedDate;
+        }
+      });
     }
   }
 
@@ -464,7 +499,9 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
             accountId: _selectedAccountId!,
             categoryId: _selectedCategoryId!,
             subcategoryId: _selectedSubcategoryId,
+            dueDate: _dueDate,
             date: _date,
+            isPaid: _isPaid,
             totalInstallments: _expenseKind == _ExpenseKind.installment
                 ? int.parse(_installmentsController.text)
                 : null,
@@ -477,7 +514,12 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
       if (keepOpen) {
         _nameController.clear();
         _amountController.clear();
-        setState(() => _date = DateTime.now());
+        setState(() {
+          final now = DateTime.now();
+          _date = now;
+          _dueDate = now;
+          _isPaid = true;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Despesa salva.')),
         );

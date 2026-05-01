@@ -26,6 +26,26 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     return query.get();
   }
 
+  Future<List<FinanceTransaction>> findByCreditCardInvoice({
+    required int userId,
+    required int creditCardId,
+    required int month,
+    required int year,
+  }) {
+    final query = select(financialTransactions)
+      ..where(
+        (table) =>
+            table.userId.equals(userId) &
+            table.creditCardId.equals(creditCardId) &
+            table.paymentMethod.equals('credit_card') &
+            table.invoiceMonth.equals(month) &
+            table.invoiceYear.equals(year),
+      )
+      ..orderBy([(table) => OrderingTerm.desc(table.date)]);
+
+    return query.get();
+  }
+
   Future<FinanceTransaction?> findByIdForUser({
     required int id,
     required int userId,
@@ -39,6 +59,31 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     FinancialTransactionsCompanion transaction,
   ) {
     return into(financialTransactions).insert(transaction);
+  }
+
+  Future<int> updatePaymentStatus({
+    required int id,
+    required int userId,
+    required bool isPaid,
+  }) {
+    return (update(financialTransactions)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(
+      FinancialTransactionsCompanion(
+        isPaid: Value(isPaid),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<int> updateTransaction({
+    required int id,
+    required int userId,
+    required FinancialTransactionsCompanion transaction,
+  }) {
+    return (update(financialTransactions)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(transaction);
   }
 
   Future<int> deleteTransaction({

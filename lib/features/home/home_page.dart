@@ -19,6 +19,7 @@ import 'card_expense_form_sheet.dart';
 import 'expense_form_sheet.dart';
 import 'home_view_model.dart';
 import 'income_form_sheet.dart';
+import 'transfer_form_sheet.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -125,11 +126,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       case _CreateAction.cardExpense:
         await _openCardExpenseForm();
       case _CreateAction.transfer:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Este formulário entra na próxima etapa.'),
-          ),
-        );
+        await _openTransferForm();
     }
   }
 
@@ -186,6 +183,25 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (mounted && saved == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Despesa no cartão salva.')),
+      );
+    }
+  }
+
+  Future<void> _openTransferForm() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => const TransferFormSheet(),
+    );
+
+    if (mounted && saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Transferência salva.')),
       );
     }
   }
@@ -438,6 +454,14 @@ class _MonthlySummaryCard extends StatelessWidget {
             color: AppColors.danger,
             percent: 0.49,
           ),
+          if (state.pendingIncomeCents > 0 ||
+              state.pendingExpenseCents > 0) ...[
+            const SizedBox(height: 16),
+            _PendingSummary(
+              pendingIncomeCents: state.pendingIncomeCents,
+              pendingExpenseCents: state.pendingExpenseCents,
+            ),
+          ],
           const SizedBox(height: 16),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -509,6 +533,86 @@ class _AmountLine extends StatelessWidget {
             backgroundColor: AppColors.border,
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PendingSummary extends StatelessWidget {
+  const _PendingSummary({
+    required this.pendingIncomeCents,
+    required this.pendingExpenseCents,
+  });
+
+  final int pendingIncomeCents;
+  final int pendingExpenseCents;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            if (pendingIncomeCents > 0)
+              _PendingLine(
+                icon: Icons.schedule_rounded,
+                label: 'A receber',
+                value: CurrencyUtils.formatCents(pendingIncomeCents),
+                color: AppColors.success,
+              ),
+            if (pendingIncomeCents > 0 && pendingExpenseCents > 0)
+              const SizedBox(height: 10),
+            if (pendingExpenseCents > 0)
+              _PendingLine(
+                icon: Icons.event_busy_rounded,
+                label: 'A pagar',
+                value: CurrencyUtils.formatCents(pendingExpenseCents),
+                color: AppColors.danger,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingLine extends StatelessWidget {
+  const _PendingLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
         ),
       ],
     );
@@ -710,8 +814,11 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        transaction.isIncome ? AppColors.success : AppColors.textPrimary;
+    final color = !transaction.isPaid
+        ? AppColors.warning
+        : transaction.isIncome
+            ? AppColors.success
+            : AppColors.textPrimary;
     final prefix = transaction.isIncome ? '+ ' : '- ';
 
     return Padding(

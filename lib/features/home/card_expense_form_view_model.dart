@@ -124,6 +124,7 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
     required DateTime purchaseDate,
     int? subcategoryId,
     int? totalInstallments,
+    bool installmentAmountIsTotal = false,
   }) async {
     final userId = _requireUserId();
     CreditCardPreview? card;
@@ -143,27 +144,39 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
 
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await _transactionRepository.createTransaction(
-        CreateTransactionRequest(
-          userId: userId,
-          accountId: paymentAccountId,
-          creditCardId: card.id,
-          categoryId: categoryId,
-          subcategoryId: subcategoryId,
-          type: 'expense',
-          description: name,
-          amountCents: amountCents,
-          date: purchaseDate,
-          paymentMethod: 'credit_card',
-          invoiceMonth: invoiceMonth,
-          invoiceYear: invoiceYear,
-          expenseKind: expenseKind,
-          installmentNumber: expenseKind == 'installment' ? 1 : null,
-          totalInstallments:
-              expenseKind == 'installment' ? totalInstallments : null,
-          isRecurring: expenseKind == 'fixed_monthly',
-        ),
+      final installments =
+          expenseKind == 'installment' ? totalInstallments ?? 1 : 1;
+      final installmentAmounts = _installmentAmounts(
+        amountCents: amountCents,
+        installments: installments,
+        splitTotal: expenseKind == 'installment' && installmentAmountIsTotal,
       );
+
+      for (var index = 0; index < installments; index++) {
+        final invoiceDate = DateTime(invoiceYear, invoiceMonth + index);
+        await _transactionRepository.createTransaction(
+          CreateTransactionRequest(
+            userId: userId,
+            accountId: paymentAccountId,
+            creditCardId: card.id,
+            categoryId: categoryId,
+            subcategoryId: subcategoryId,
+            type: 'expense',
+            description: installments > 1
+                ? '${name.trim()} (${index + 1}/$installments)'
+                : name,
+            amountCents: installmentAmounts[index],
+            date: purchaseDate,
+            paymentMethod: 'credit_card',
+            invoiceMonth: invoiceDate.month,
+            invoiceYear: invoiceDate.year,
+            expenseKind: expenseKind,
+            installmentNumber: installments > 1 ? index + 1 : null,
+            totalInstallments: installments > 1 ? installments : null,
+            isRecurring: expenseKind == 'fixed_monthly',
+          ),
+        );
+      }
       state = state.copyWith(isLoading: false, clearError: true);
     } catch (error) {
       state = state.copyWith(
@@ -172,6 +185,30 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
       );
       rethrow;
     }
+  }
+
+  List<int> _installmentAmounts({
+    required int amountCents,
+    required int installments,
+    required bool splitTotal,
+  }) {
+    if (!splitTotal || installments <= 1) {
+      return List.filled(installments, amountCents);
+    }
+
+    if (amountCents < installments) {
+      throw ArgumentError(
+        'O valor total nÃ£o permite dividir todas as parcelas com valor maior que zero.',
+      );
+    }
+
+    final baseAmount = amountCents ~/ installments;
+    final remainder = amountCents % installments;
+
+    return [
+      for (var index = 0; index < installments; index++)
+        baseAmount + (index < remainder ? 1 : 0),
+    ];
   }
 
   Future<int> createExpenseCategory(String name) async {

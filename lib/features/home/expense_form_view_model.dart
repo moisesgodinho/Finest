@@ -112,7 +112,9 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
     required String expenseKind,
     required int accountId,
     required int categoryId,
+    required DateTime dueDate,
     required DateTime date,
+    required bool isPaid,
     int? subcategoryId,
     int? totalInstallments,
   }) async {
@@ -130,11 +132,13 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
           description: name,
           amountCents: amountCents,
           date: date,
+          dueDate: dueDate,
           paymentMethod: 'account',
           expenseKind: expenseKind,
           installmentNumber: expenseKind == 'installment' ? 1 : null,
           totalInstallments:
               expenseKind == 'installment' ? totalInstallments : null,
+          isPaid: isPaid,
           isRecurring: expenseKind == 'fixed_monthly',
         ),
       );

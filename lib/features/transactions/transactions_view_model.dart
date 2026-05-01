@@ -20,7 +20,9 @@ class TransactionListItem {
     required this.categoryName,
     required this.amountCents,
     required this.date,
+    required this.dueDate,
     required this.type,
+    required this.isPaid,
     required this.icon,
     required this.iconColor,
   });
@@ -31,7 +33,9 @@ class TransactionListItem {
   final String categoryName;
   final int amountCents;
   final DateTime date;
+  final DateTime? dueDate;
   final String type;
+  final bool isPaid;
   final IconData icon;
   final Color iconColor;
 
@@ -58,6 +62,9 @@ class TransactionsState {
   List<TransactionListItem> get filteredTransactions {
     if (selectedType == 'all') {
       return transactions;
+    }
+    if (selectedType == 'pending') {
+      return transactions.where((transaction) => !transaction.isPaid).toList();
     }
     return transactions
         .where((transaction) => transaction.type == selectedType)
@@ -123,7 +130,9 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     required String type,
     required String description,
     required int amountCents,
+    required DateTime dueDate,
     required DateTime date,
+    required bool isPaid,
   }) async {
     final userId = _requireUserId();
     state = state.copyWith(isLoading: true, clearError: true);
@@ -137,8 +146,28 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
           type: type,
           description: description,
           amountCents: amountCents,
+          dueDate: dueDate,
           date: date,
+          isPaid: isPaid,
         ),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> markTransactionAsPaid(TransactionListItem transaction) async {
+    final userId = _requireUserId();
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    try {
+      await _transactionRepository.markTransactionAsPaid(
+        userId: userId,
+        transactionId: transaction.id,
       );
     } catch (error) {
       state = state.copyWith(
@@ -247,7 +276,9 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       categoryName: category?.name ?? 'Sem categoria',
       amountCents: transaction.amount,
       date: transaction.date,
+      dueDate: transaction.dueDate,
       type: transaction.type,
+      isPaid: transaction.isPaid,
       icon: category?.icon ?? Icons.category_rounded,
       iconColor: category?.color ?? Colors.grey,
     );

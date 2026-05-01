@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/app_database.dart';
 import '../models/create_transaction_request.dart';
+import '../models/update_credit_card_expense_request.dart';
 
 abstract class TransactionRepository {
   Stream<List<FinanceTransaction>> watchTransactions(int userId);
@@ -10,6 +11,13 @@ abstract class TransactionRepository {
   Future<List<FinanceTransaction>> findTransactions(int userId);
 
   Future<int> createTransaction(CreateTransactionRequest request);
+
+  Future<void> markTransactionAsPaid({
+    required int userId,
+    required int transactionId,
+  });
+
+  Future<void> updateCreditCardExpense(UpdateCreditCardExpenseRequest request);
 
   Future<void> deleteTransaction({
     required int userId,
@@ -73,6 +81,10 @@ class DriftTransactionRepository implements TransactionRepository {
       }
 
       CreditCard? creditCard;
+      CreditCardInvoice? invoice;
+      final invoiceMonth = request.invoiceMonth ?? DateTime.now().month;
+      final invoiceYear = request.invoiceYear ?? DateTime.now().year;
+
       if (request.paymentMethod == 'credit_card') {
         final creditCardId = request.creditCardId;
         if (creditCardId == null) {
@@ -88,6 +100,16 @@ class DriftTransactionRepository implements TransactionRepository {
         }
         if (creditCard.defaultPaymentAccountId != account.id) {
           throw StateError('Conta padrão incompatível com o cartão.');
+        }
+
+        invoice = await _database.creditCardInvoicesDao.findByCardMonth(
+          userId: request.userId,
+          creditCardId: creditCard.id,
+          month: invoiceMonth,
+          year: invoiceYear,
+        );
+        if (invoice?.status == 'paid') {
+          throw StateError('Esta fatura já foi paga.');
         }
       }
 
@@ -105,8 +127,12 @@ class DriftTransactionRepository implements TransactionRepository {
           date: request.date,
           dueDate: Value(request.dueDate),
           paymentMethod: request.paymentMethod,
-          invoiceMonth: Value(request.invoiceMonth),
-          invoiceYear: Value(request.invoiceYear),
+          invoiceMonth: Value(
+            request.paymentMethod == 'credit_card' ? invoiceMonth : null,
+          ),
+          invoiceYear: Value(
+            request.paymentMethod == 'credit_card' ? invoiceYear : null,
+          ),
           expenseKind: Value(request.expenseKind),
           installmentNumber: Value(request.installmentNumber),
           totalInstallments: Value(request.totalInstallments),
@@ -122,13 +148,14 @@ class DriftTransactionRepository implements TransactionRepository {
       }
 
       if (request.paymentMethod == 'credit_card' && creditCard != null) {
-        if (_shouldAffectCurrentInvoice(request)) {
-          await _database.creditCardsDao.updateCurrentInvoice(
-            id: creditCard.id,
-            userId: request.userId,
-            currentInvoice: creditCard.currentInvoice + request.amountCents,
-          );
-        }
+        await _addAmountToInvoice(
+          userId: request.userId,
+          card: creditCard,
+          invoice: invoice,
+          month: invoiceMonth,
+          year: invoiceYear,
+          amountDelta: request.amountCents,
+        );
       } else {
         await _database.accountsDao.updateCurrentBalance(
           id: account.id,
@@ -138,6 +165,172 @@ class DriftTransactionRepository implements TransactionRepository {
       }
 
       return transactionId;
+    });
+  }
+
+  @override
+  Future<void> markTransactionAsPaid({
+    required int userId,
+    required int transactionId,
+  }) async {
+    await _database.transaction(() async {
+      final transaction = await _database.transactionsDao.findByIdForUser(
+        id: transactionId,
+        userId: userId,
+      );
+      if (transaction == null) {
+        throw StateError('Lançamento não encontrado.');
+      }
+      if (transaction.isPaid) {
+        return;
+      }
+
+      final account = await _database.accountsDao.findByIdForUser(
+        id: transaction.accountId,
+        userId: userId,
+      );
+      if (account == null) {
+        throw StateError('Conta não encontrada.');
+      }
+
+      if (transaction.paymentMethod == 'credit_card' &&
+          transaction.creditCardId != null) {
+        final creditCard = await _database.creditCardsDao.findByIdForUser(
+          id: transaction.creditCardId!,
+          userId: userId,
+        );
+        if (creditCard == null) {
+          throw StateError('Cartão de crédito não encontrado.');
+        }
+
+        final invoiceMonth = transaction.invoiceMonth ?? DateTime.now().month;
+        final invoiceYear = transaction.invoiceYear ?? DateTime.now().year;
+        final invoice = await _database.creditCardInvoicesDao.findByCardMonth(
+          userId: userId,
+          creditCardId: creditCard.id,
+          month: invoiceMonth,
+          year: invoiceYear,
+        );
+
+        await _addAmountToInvoice(
+          userId: userId,
+          card: creditCard,
+          invoice: invoice,
+          month: invoiceMonth,
+          year: invoiceYear,
+          amountDelta: transaction.amount,
+        );
+      } else {
+        await _database.accountsDao.updateCurrentBalance(
+          id: account.id,
+          userId: userId,
+          currentBalance:
+              account.currentBalance + _transactionDelta(transaction),
+        );
+      }
+
+      final affectedRows = await _database.transactionsDao.updatePaymentStatus(
+        id: transactionId,
+        userId: userId,
+        isPaid: true,
+      );
+      if (affectedRows == 0) {
+        throw StateError('Lançamento não atualizado.');
+      }
+    });
+  }
+
+  @override
+  Future<void> updateCreditCardExpense(
+    UpdateCreditCardExpenseRequest request,
+  ) async {
+    if (request.amountCents <= 0) {
+      throw ArgumentError('O valor da compra deve ser maior que zero.');
+    }
+
+    await _database.transaction(() async {
+      final transaction = await _database.transactionsDao.findByIdForUser(
+        id: request.transactionId,
+        userId: request.userId,
+      );
+      if (transaction == null) {
+        throw StateError('Compra nÃ£o encontrada.');
+      }
+      if (transaction.paymentMethod != 'credit_card' ||
+          transaction.creditCardId == null ||
+          transaction.type != 'expense') {
+        throw StateError('Esta compra nÃ£o pertence a uma fatura de cartÃ£o.');
+      }
+
+      final category = await _database.categoriesDao.findByIdForUser(
+        id: request.categoryId,
+        userId: request.userId,
+      );
+      if (category == null) {
+        throw StateError('Categoria nÃ£o encontrada.');
+      }
+      if (category.type != 'expense') {
+        throw StateError('Categoria incompatÃ­vel com despesa.');
+      }
+
+      if (request.subcategoryId != null) {
+        final subcategory =
+            await _database.categoriesDao.findSubcategoryByIdForUser(
+          id: request.subcategoryId!,
+          userId: request.userId,
+        );
+        if (subcategory == null || subcategory.categoryId != category.id) {
+          throw StateError('Subcategoria incompatÃ­vel com a categoria.');
+        }
+      }
+
+      final creditCard = await _database.creditCardsDao.findByIdForUser(
+        id: transaction.creditCardId!,
+        userId: request.userId,
+      );
+      if (creditCard == null) {
+        throw StateError('CartÃ£o de crÃ©dito nÃ£o encontrado.');
+      }
+
+      final invoiceMonth = transaction.invoiceMonth ?? DateTime.now().month;
+      final invoiceYear = transaction.invoiceYear ?? DateTime.now().year;
+      final invoice = await _database.creditCardInvoicesDao.findByCardMonth(
+        userId: request.userId,
+        creditCardId: creditCard.id,
+        month: invoiceMonth,
+        year: invoiceYear,
+      );
+      if (invoice?.status == 'paid') {
+        throw StateError('Esta fatura jÃ¡ foi paga.');
+      }
+
+      final amountDelta = request.amountCents - transaction.amount;
+      if (transaction.isPaid && amountDelta != 0) {
+        await _addAmountToInvoice(
+          userId: request.userId,
+          card: creditCard,
+          invoice: invoice,
+          month: invoiceMonth,
+          year: invoiceYear,
+          amountDelta: amountDelta,
+        );
+      }
+
+      final affectedRows = await _database.transactionsDao.updateTransaction(
+        id: transaction.id,
+        userId: request.userId,
+        transaction: FinancialTransactionsCompanion(
+          description: Value(request.description.trim()),
+          amount: Value(request.amountCents),
+          categoryId: Value(request.categoryId),
+          subcategoryId: Value(request.subcategoryId),
+          date: Value(request.date),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      if (affectedRows == 0) {
+        throw StateError('Compra nÃ£o atualizada.');
+      }
     });
   }
 
@@ -163,6 +356,34 @@ class DriftTransactionRepository implements TransactionRepository {
         throw StateError('Conta não encontrada.');
       }
 
+      if (transaction.isPaid &&
+          transaction.paymentMethod == 'credit_card' &&
+          transaction.creditCardId != null) {
+        final creditCard = await _database.creditCardsDao.findByIdForUser(
+          id: transaction.creditCardId!,
+          userId: userId,
+        );
+        if (creditCard != null) {
+          final invoiceMonth = transaction.invoiceMonth ?? DateTime.now().month;
+          final invoiceYear = transaction.invoiceYear ?? DateTime.now().year;
+          final invoice = await _database.creditCardInvoicesDao.findByCardMonth(
+            userId: userId,
+            creditCardId: creditCard.id,
+            month: invoiceMonth,
+            year: invoiceYear,
+          );
+
+          await _addAmountToInvoice(
+            userId: userId,
+            card: creditCard,
+            invoice: invoice,
+            month: invoiceMonth,
+            year: invoiceYear,
+            amountDelta: -transaction.amount,
+          );
+        }
+      }
+
       final deletedRows = await _database.transactionsDao.deleteTransaction(
         id: transactionId,
         userId: userId,
@@ -175,22 +396,7 @@ class DriftTransactionRepository implements TransactionRepository {
         return;
       }
 
-      if (transaction.paymentMethod == 'credit_card' &&
-          transaction.creditCardId != null) {
-        final creditCard = await _database.creditCardsDao.findByIdForUser(
-          id: transaction.creditCardId!,
-          userId: userId,
-        );
-        if (creditCard != null &&
-            _transactionAffectsCurrentInvoice(transaction)) {
-          await _database.creditCardsDao.updateCurrentInvoice(
-            id: creditCard.id,
-            userId: userId,
-            currentInvoice: (creditCard.currentInvoice - transaction.amount)
-                .clamp(0, 1 << 31),
-          );
-        }
-      } else {
+      if (transaction.paymentMethod != 'credit_card') {
         await _database.accountsDao.updateCurrentBalance(
           id: account.id,
           userId: userId,
@@ -199,6 +405,61 @@ class DriftTransactionRepository implements TransactionRepository {
         );
       }
     });
+  }
+
+  Future<void> _addAmountToInvoice({
+    required int userId,
+    required CreditCard card,
+    required CreditCardInvoice? invoice,
+    required int month,
+    required int year,
+    required int amountDelta,
+  }) async {
+    if (invoice?.status == 'paid') {
+      throw StateError('Esta fatura já foi paga.');
+    }
+
+    final now = DateTime.now();
+    final newAmount =
+        ((invoice?.amount ?? 0) + amountDelta).clamp(0, 1 << 31).toInt();
+
+    if (invoice == null) {
+      if (newAmount <= 0) {
+        return;
+      }
+      await _database.creditCardInvoicesDao.insertInvoice(
+        CreditCardInvoicesCompanion.insert(
+          userId: userId,
+          creditCardId: card.id,
+          month: month,
+          year: year,
+          amount: Value(newAmount),
+          status: const Value('open'),
+          dueDate:
+              _invoiceDueDate(month: month, year: year, dueDay: card.dueDay),
+          paymentAccountId: Value(card.defaultPaymentAccountId),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ),
+      );
+    } else {
+      await _database.creditCardInvoicesDao.updateInvoice(
+        id: invoice.id,
+        userId: userId,
+        invoice: CreditCardInvoicesCompanion(
+          amount: Value(newAmount),
+          updatedAt: Value(now),
+        ),
+      );
+    }
+
+    if (_isCurrentInvoice(month, year)) {
+      await _database.creditCardsDao.updateCurrentInvoice(
+        id: card.id,
+        userId: userId,
+        currentInvoice: newAmount,
+      );
+    }
   }
 
   int _balanceDelta(CreateTransactionRequest request) {
@@ -213,19 +474,18 @@ class DriftTransactionRepository implements TransactionRepository {
         : -transaction.amount;
   }
 
-  bool _shouldAffectCurrentInvoice(CreateTransactionRequest request) {
-    final now = DateTime.now();
-    return request.invoiceMonth == null ||
-        request.invoiceYear == null ||
-        (request.invoiceMonth == now.month && request.invoiceYear == now.year);
+  DateTime _invoiceDueDate({
+    required int month,
+    required int year,
+    required int dueDay,
+  }) {
+    final lastDay = DateTime(year, month + 1, 0).day;
+    return DateTime(year, month, dueDay.clamp(1, lastDay));
   }
 
-  bool _transactionAffectsCurrentInvoice(FinanceTransaction transaction) {
+  bool _isCurrentInvoice(int month, int year) {
     final now = DateTime.now();
-    return transaction.invoiceMonth == null ||
-        transaction.invoiceYear == null ||
-        (transaction.invoiceMonth == now.month &&
-            transaction.invoiceYear == now.year);
+    return month == now.month && year == now.year;
   }
 }
 

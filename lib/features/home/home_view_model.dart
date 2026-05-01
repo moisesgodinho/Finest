@@ -25,6 +25,8 @@ class HomeState {
     required this.initialMonthBalanceCents,
     required this.incomeCents,
     required this.expenseCents,
+    required this.pendingIncomeCents,
+    required this.pendingExpenseCents,
     required this.creditCard,
     required this.categories,
     required this.recentTransactions,
@@ -40,6 +42,8 @@ class HomeState {
       initialMonthBalanceCents: 0,
       incomeCents: 0,
       expenseCents: 0,
+      pendingIncomeCents: 0,
+      pendingExpenseCents: 0,
       creditCard: const CreditCardPreview(
         id: 0,
         name: 'Nenhum cartão',
@@ -67,6 +71,8 @@ class HomeState {
   final int initialMonthBalanceCents;
   final int incomeCents;
   final int expenseCents;
+  final int pendingIncomeCents;
+  final int pendingExpenseCents;
   final CreditCardPreview creditCard;
   final List<CategoryExpensePreview> categories;
   final List<TransactionPreview> recentTransactions;
@@ -87,6 +93,8 @@ class HomeState {
     int? initialMonthBalanceCents,
     int? incomeCents,
     int? expenseCents,
+    int? pendingIncomeCents,
+    int? pendingExpenseCents,
     CreditCardPreview? creditCard,
     List<CategoryExpensePreview>? categories,
     List<TransactionPreview>? recentTransactions,
@@ -102,6 +110,8 @@ class HomeState {
           initialMonthBalanceCents ?? this.initialMonthBalanceCents,
       incomeCents: incomeCents ?? this.incomeCents,
       expenseCents: expenseCents ?? this.expenseCents,
+      pendingIncomeCents: pendingIncomeCents ?? this.pendingIncomeCents,
+      pendingExpenseCents: pendingExpenseCents ?? this.pendingExpenseCents,
       creditCard: creditCard ?? this.creditCard,
       categories: categories ?? this.categories,
       recentTransactions: recentTransactions ?? this.recentTransactions,
@@ -187,8 +197,9 @@ class HomeViewModel extends StateNotifier<HomeState> {
     final firstDay = AppDateUtils.firstDayOfMonth(now);
     final lastDay = AppDateUtils.lastDayOfMonth(now);
     final monthTransactions = _transactions.where((transaction) {
-      return !transaction.date.isBefore(firstDay) &&
-          !transaction.date.isAfter(lastDay);
+      final referenceDate = _referenceDate(transaction);
+      return !referenceDate.isBefore(firstDay) &&
+          !referenceDate.isAfter(lastDay);
     }).toList();
 
     final incomeCents = monthTransactions
@@ -197,12 +208,46 @@ class HomeViewModel extends StateNotifier<HomeState> {
     final expenseCents = monthTransactions
         .where((transaction) => transaction.type == 'expense')
         .fold<int>(0, (total, transaction) => total + transaction.amount);
+    final paidAccountIncomeCents = monthTransactions
+        .where(
+          (transaction) =>
+              transaction.isPaid &&
+              transaction.paymentMethod != 'credit_card' &&
+              transaction.type == 'income',
+        )
+        .fold<int>(0, (total, transaction) => total + transaction.amount);
+    final paidAccountExpenseCents = monthTransactions
+        .where(
+          (transaction) =>
+              transaction.isPaid &&
+              transaction.paymentMethod != 'credit_card' &&
+              transaction.type == 'expense',
+        )
+        .fold<int>(0, (total, transaction) => total + transaction.amount);
+    final pendingIncomeCents = monthTransactions
+        .where(
+          (transaction) =>
+              !transaction.isPaid &&
+              transaction.paymentMethod != 'credit_card' &&
+              transaction.type == 'income',
+        )
+        .fold<int>(0, (total, transaction) => total + transaction.amount);
+    final pendingExpenseCents = monthTransactions
+        .where(
+          (transaction) =>
+              !transaction.isPaid &&
+              transaction.paymentMethod != 'credit_card' &&
+              transaction.type == 'expense',
+        )
+        .fold<int>(0, (total, transaction) => total + transaction.amount);
     final currentBalanceCents = _accounts.fold<int>(
       0,
       (total, account) => total + account.currentBalance,
     );
     final initialMonthBalanceCents =
-        currentBalanceCents - incomeCents + expenseCents;
+        currentBalanceCents - paidAccountIncomeCents + paidAccountExpenseCents;
+    final projectedBalanceCents =
+        currentBalanceCents + pendingIncomeCents - pendingExpenseCents;
     final categoryMap = {
       for (final category in _categories) category.id: category,
     };
@@ -210,10 +255,12 @@ class HomeViewModel extends StateNotifier<HomeState> {
 
     state = state.copyWith(
       currentBalanceCents: currentBalanceCents,
-      projectedBalanceCents: currentBalanceCents,
+      projectedBalanceCents: projectedBalanceCents,
       initialMonthBalanceCents: initialMonthBalanceCents,
       incomeCents: incomeCents,
       expenseCents: expenseCents,
+      pendingIncomeCents: pendingIncomeCents,
+      pendingExpenseCents: pendingExpenseCents,
       creditCard: _buildPrimaryCard(accountsById),
       categories: _buildCategoryPreviews(
         monthTransactions: monthTransactions,
@@ -261,6 +308,10 @@ class HomeViewModel extends StateNotifier<HomeState> {
       defaultPaymentAccountId: selectedCard.defaultPaymentAccountId,
       defaultPaymentAccountName: defaultAccount?.name,
     );
+  }
+
+  DateTime _referenceDate(FinanceTransaction transaction) {
+    return transaction.dueDate ?? transaction.date;
   }
 
   List<CategoryExpensePreview> _buildCategoryPreviews({
@@ -313,6 +364,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
           iconColor:
               categoryMap[transaction.categoryId]?.color ?? AppColors.primary,
           isIncome: transaction.type == 'income',
+          isPaid: transaction.isPaid,
         ),
     ];
   }

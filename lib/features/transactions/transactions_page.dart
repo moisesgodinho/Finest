@@ -58,28 +58,36 @@ class TransactionsPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'all',
-                        label: Text('Todos'),
-                        icon: Icon(Icons.list_alt_rounded),
-                      ),
-                      ButtonSegment(
-                        value: 'income',
-                        label: Text('Receitas'),
-                        icon: Icon(Icons.arrow_downward_rounded),
-                      ),
-                      ButtonSegment(
-                        value: 'expense',
-                        label: Text('Despesas'),
-                        icon: Icon(Icons.arrow_upward_rounded),
-                      ),
-                    ],
-                    selected: {state.selectedType},
-                    onSelectionChanged: (selection) {
-                      viewModel.selectType(selection.first);
-                    },
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'all',
+                          label: Text('Todos'),
+                          icon: Icon(Icons.list_alt_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'income',
+                          label: Text('Receitas'),
+                          icon: Icon(Icons.arrow_downward_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'expense',
+                          label: Text('Despesas'),
+                          icon: Icon(Icons.arrow_upward_rounded),
+                        ),
+                        ButtonSegment(
+                          value: 'pending',
+                          label: Text('Previstos'),
+                          icon: Icon(Icons.schedule_rounded),
+                        ),
+                      ],
+                      selected: {state.selectedType},
+                      onSelectionChanged: (selection) {
+                        viewModel.selectType(selection.first);
+                      },
+                    ),
                   ),
                   const SizedBox(height: 18),
                   if (state.accounts.isEmpty)
@@ -92,6 +100,13 @@ class TransactionsPage extends ConsumerWidget {
                         for (final transaction in state.filteredTransactions)
                           _TransactionTile(
                             transaction: transaction,
+                            onMarkAsPaid: transaction.isPaid
+                                ? null
+                                : () => _confirmMarkAsPaid(
+                                      context,
+                                      viewModel,
+                                      transaction,
+                                    ),
                             onDelete: () => _confirmDelete(
                               context,
                               viewModel,
@@ -135,7 +150,9 @@ class TransactionsPage extends ConsumerWidget {
             required String type,
             required String description,
             required int amountCents,
+            required DateTime dueDate,
             required DateTime date,
+            required bool isPaid,
           }) async {
             await viewModel.createTransaction(
               accountId: accountId,
@@ -143,7 +160,9 @@ class TransactionsPage extends ConsumerWidget {
               type: type,
               description: description,
               amountCents: amountCents,
+              dueDate: dueDate,
               date: date,
+              isPaid: isPaid,
             );
           },
         );
@@ -186,6 +205,38 @@ class TransactionsPage extends ConsumerWidget {
 
     if (shouldDelete == true) {
       await viewModel.deleteTransaction(transaction);
+    }
+  }
+
+  Future<void> _confirmMarkAsPaid(
+    BuildContext context,
+    TransactionsViewModel viewModel,
+    TransactionListItem transaction,
+  ) async {
+    final shouldMark = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Efetivar lançamento?'),
+          content: const Text(
+            'O saldo da conta será atualizado automaticamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Efetivar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldMark == true) {
+      await viewModel.markTransactionAsPaid(transaction);
     }
   }
 }
@@ -255,16 +306,21 @@ class _CenteredMessage extends StatelessWidget {
 class _TransactionTile extends StatelessWidget {
   const _TransactionTile({
     required this.transaction,
+    required this.onMarkAsPaid,
     required this.onDelete,
   });
 
   final TransactionListItem transaction;
+  final VoidCallback? onMarkAsPaid;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final amountColor =
-        transaction.isIncome ? AppColors.success : AppColors.textPrimary;
+    final amountColor = !transaction.isPaid
+        ? AppColors.warning
+        : transaction.isIncome
+            ? AppColors.success
+            : AppColors.textPrimary;
     final amountPrefix = transaction.isIncome ? '+ ' : '- ';
 
     return Padding(
@@ -293,6 +349,10 @@ class _TransactionTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+                if (!transaction.isPaid) ...[
+                  const SizedBox(height: 4),
+                  _PendingBadge(dueDate: transaction.dueDate),
+                ],
               ],
             ),
           ),
@@ -304,6 +364,12 @@ class _TransactionTile extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
           ),
+          if (onMarkAsPaid != null)
+            IconButton(
+              onPressed: onMarkAsPaid,
+              tooltip: 'Efetivar lançamento',
+              icon: const Icon(Icons.check_circle_outline_rounded),
+            ),
           IconButton(
             onPressed: onDelete,
             tooltip: 'Remover lançamento',
@@ -312,6 +378,38 @@ class _TransactionTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _PendingBadge extends StatelessWidget {
+  const _PendingBadge({required this.dueDate});
+
+  final DateTime? dueDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = dueDate == null
+        ? 'Previsto'
+        : 'Previsto • vence ${_formatDate(dueDate!)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.warning,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
   }
 }
 
@@ -330,7 +428,9 @@ class _TransactionFormSheet extends StatefulWidget {
     required String type,
     required String description,
     required int amountCents,
+    required DateTime dueDate,
     required DateTime date,
+    required bool isPaid,
   }) onSubmit;
 
   @override
@@ -344,7 +444,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   String _type = 'expense';
   int? _accountId;
   int? _categoryId;
+  DateTime _dueDate = DateTime.now();
   DateTime _date = DateTime.now();
+  bool _isPaid = true;
   bool _isSubmitting = false;
 
   List<CategoryModel> get _availableCategories {
@@ -499,12 +601,34 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                 },
               ),
               const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_today_rounded),
-                label: Text(
-                  '${_date.day.toString().padLeft(2, '0')}/${_date.month.toString().padLeft(2, '0')}/${_date.year}',
+              InkWell(
+                onTap: () => _pickDate(isDueDate: true),
+                borderRadius: BorderRadius.circular(16),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data de vencimento',
+                    prefixIcon: Icon(Icons.event_available_rounded),
+                  ),
+                  child: Text(_formatDate(_dueDate)),
                 ),
+              ),
+              const SizedBox(height: 14),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: _isPaid,
+                title: const Text('Pagamento efetivado'),
+                subtitle: Text(
+                  _isPaid
+                      ? 'Atualiza o saldo da conta ao salvar.'
+                      : 'Salva como previsto e não altera o saldo agora.',
+                ),
+                onChanged: (value) => setState(() => _isPaid = value),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () => _pickDate(isDueDate: false),
+                icon: const Icon(Icons.calendar_today_rounded),
+                label: Text(_formatDate(_date)),
               ),
               const SizedBox(height: 22),
               SizedBox(
@@ -521,15 +645,22 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     );
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDate({required bool isDueDate}) async {
+    final currentDate = isDueDate ? _dueDate : _date;
     final selectedDate = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: currentDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
     if (selectedDate != null) {
-      setState(() => _date = selectedDate);
+      setState(() {
+        if (isDueDate) {
+          _dueDate = selectedDate;
+        } else {
+          _date = selectedDate;
+        }
+      });
     }
   }
 
@@ -546,7 +677,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         type: _type,
         description: _descriptionController.text.trim(),
         amountCents: CurrencyUtils.parseToCents(_amountController.text),
+        dueDate: _dueDate,
         date: _date,
+        isPaid: _isPaid,
       );
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -556,5 +689,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

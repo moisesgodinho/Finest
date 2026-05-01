@@ -27,6 +27,8 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
   final _amountController = TextEditingController();
   final _installmentsController = TextEditingController(text: '2');
   _ExpenseKind _expenseKind = _ExpenseKind.single;
+  _InstallmentAmountMode _installmentAmountMode =
+      _InstallmentAmountMode.totalPurchase;
   int? _selectedCardId;
   int? _selectedCategoryId;
   int? _selectedSubcategoryId;
@@ -146,9 +148,7 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
                     decimal: true,
                   ),
                   decoration: InputDecoration(
-                    labelText: _expenseKind == _ExpenseKind.installment
-                        ? 'Valor da parcela'
-                        : 'Valor',
+                    labelText: _amountLabel,
                     hintText: 'Ex: 129,90',
                     prefixIcon: const Icon(Icons.payments_rounded),
                   ),
@@ -200,6 +200,32 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
                       return null;
                     },
                   ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Valor informado',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final mode in _InstallmentAmountMode.values)
+                        ChoiceChip(
+                          selected: _installmentAmountMode == mode,
+                          label: Text(mode.label),
+                          avatar: Icon(mode.icon, size: 18),
+                          onSelected: (_) {
+                            setState(() => _installmentAmountMode = mode);
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _installmentAmountMode.description,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
                 const SizedBox(height: 14),
                 DropdownButtonFormField<int>(
@@ -222,9 +248,11 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
                 const SizedBox(height: 14),
                 DropdownButtonFormField<DateTime>(
                   initialValue: _invoiceMonth,
-                  decoration: const InputDecoration(
-                    labelText: 'Fatura',
-                    prefixIcon: Icon(Icons.calendar_month_rounded),
+                  decoration: InputDecoration(
+                    labelText: _expenseKind == _ExpenseKind.installment
+                        ? 'Primeira parcela na fatura'
+                        : 'Fatura',
+                    prefixIcon: const Icon(Icons.calendar_month_rounded),
                   ),
                   items: [
                     for (final month in _invoiceMonthOptions())
@@ -553,6 +581,9 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
             totalInstallments: _expenseKind == _ExpenseKind.installment
                 ? int.parse(_installmentsController.text)
                 : null,
+            installmentAmountIsTotal: _expenseKind ==
+                    _ExpenseKind.installment &&
+                _installmentAmountMode == _InstallmentAmountMode.totalPurchase,
           );
 
       if (!mounted) {
@@ -580,6 +611,16 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  String get _amountLabel {
+    if (_expenseKind != _ExpenseKind.installment) {
+      return 'Valor';
+    }
+
+    return _installmentAmountMode == _InstallmentAmountMode.totalPurchase
+        ? 'Valor total da compra'
+        : 'Valor da parcela';
   }
 }
 
@@ -704,5 +745,32 @@ enum _ExpenseKind {
 
   final String value;
   final String label;
+  final IconData icon;
+}
+
+enum _InstallmentAmountMode {
+  totalPurchase(
+    'total_purchase',
+    'Total da compra',
+    'O valor será dividido automaticamente entre as parcelas.',
+    Icons.splitscreen_rounded,
+  ),
+  installmentValue(
+    'installment_value',
+    'Valor da parcela',
+    'O mesmo valor será lançado em cada parcela.',
+    Icons.payments_rounded,
+  );
+
+  const _InstallmentAmountMode(
+    this.value,
+    this.label,
+    this.description,
+    this.icon,
+  );
+
+  final String value;
+  final String label;
+  final String description;
   final IconData icon;
 }
