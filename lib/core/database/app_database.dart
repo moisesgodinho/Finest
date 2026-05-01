@@ -57,7 +57,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -171,6 +171,17 @@ class AppDatabase extends _$AppDatabase {
               migrator,
               tableName: 'credit_card_invoices',
               createTable: () => migrator.createTable(creditCardInvoices),
+            );
+          }
+          if (from < 7) {
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'accounts',
+              columnName: 'emergency_reserve_target',
+              addColumn: () => migrator.addColumn(
+                accounts,
+                accounts.emergencyReserveTarget,
+              ),
             );
           }
         },

@@ -5,6 +5,7 @@ class CreateAccountRequest {
     required this.type,
     required this.initialBalance,
     this.bankName,
+    this.emergencyReserveTarget,
     this.color = '#006B4F',
     this.icon,
   });
@@ -14,6 +15,7 @@ class CreateAccountRequest {
   final String type;
   final String? bankName;
   final int initialBalance;
+  final int? emergencyReserveTarget;
   final String color;
   final String? icon;
 }

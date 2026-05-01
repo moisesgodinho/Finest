@@ -14,6 +14,8 @@ import '../../shared/widgets/section_card.dart';
 import '../accounts/accounts_page.dart';
 import '../cards/cards_page.dart';
 import '../planning/planning_page.dart';
+import '../pet/finance_pet_avatar.dart';
+import '../pet/pet_view_model.dart';
 import '../settings/settings_page.dart';
 import 'card_expense_form_sheet.dart';
 import 'expense_form_sheet.dart';
@@ -247,6 +249,7 @@ class _HomeDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeViewModelProvider);
+    final petState = ref.watch(petViewModelProvider);
     final viewModel = ref.read(homeViewModelProvider.notifier);
     final firstName = state.userName.split(' ').first;
 
@@ -317,6 +320,11 @@ class _HomeDashboard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 18),
+            _FinancePetHomeCard(
+              state: petState,
+              onTap: () => context.push(AppRoutes.pet),
+            ),
+            const SizedBox(height: 18),
             _ResponsiveSummarySection(state: state),
             const SizedBox(height: 18),
             _CategoriesCard(categories: state.categories),
@@ -327,6 +335,148 @@ class _HomeDashboard extends ConsumerWidget {
               context.push(AppRoutes.investments);
             }),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FinancePetHomeCard extends StatelessWidget {
+  const _FinancePetHomeCard({
+    required this.state,
+    required this.onTap,
+  });
+
+  final PetState state;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final streakLabel = state.contributionStreakMonths == 1
+        ? '1 mês seguido'
+        : '${state.contributionStreakMonths} meses seguidos';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              FinancePetAvatar(
+                level: state.level,
+                progress: state.progressToNextLevel,
+                size: 96,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'FinancePet',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Nv. ${state.level}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      state.currentLevel.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: state.progressToNextLevel,
+                        minHeight: 9,
+                        backgroundColor: AppColors.border,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.primaryLight,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${(state.savingsRate * 100).round()}% de taxa',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                        Text(
+                          streakLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary,
+              ),
+            ],
+          ),
         ),
       ),
     );

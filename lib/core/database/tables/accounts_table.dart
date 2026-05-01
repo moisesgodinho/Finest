@@ -14,6 +14,7 @@ class Accounts extends Table {
   TextColumn get bankName => text().nullable()();
   IntColumn get initialBalance => integer().withDefault(const Constant(0))();
   IntColumn get currentBalance => integer().withDefault(const Constant(0))();
+  IntColumn get emergencyReserveTarget => integer().nullable()();
   TextColumn get color => text().withDefault(const Constant('#006B4F'))();
   TextColumn get icon => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

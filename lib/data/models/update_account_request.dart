@@ -8,6 +8,7 @@ class UpdateAccountRequest {
     required this.currentBalance,
     required this.color,
     this.bankName,
+    this.emergencyReserveTarget,
     this.icon,
   });
 
@@ -19,5 +20,6 @@ class UpdateAccountRequest {
   final int initialBalance;
   final int currentBalance;
   final String color;
+  final int? emergencyReserveTarget;
   final String? icon;
 }

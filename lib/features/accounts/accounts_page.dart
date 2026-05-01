@@ -54,28 +54,6 @@ class AccountsPage extends ConsumerWidget {
               onToggleVisibility: viewModel.toggleBalanceVisibility,
             ),
             const SizedBox(height: 18),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _AccountStatCard(
-                  icon: Icons.account_balance_wallet_rounded,
-                  title: 'Contas ativas',
-                  value: '${state.accounts.length}',
-                ),
-                _AccountStatCard(
-                  icon: Icons.credit_card_rounded,
-                  title: 'Conta corrente',
-                  value: CurrencyUtils.formatCents(state.checkingBalanceCents),
-                ),
-                _AccountStatCard(
-                  icon: Icons.savings_rounded,
-                  title: 'Poupança',
-                  value: CurrencyUtils.formatCents(state.savingsBalanceCents),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
             SectionCard(
               title: 'Minhas contas',
               trailing: TextButton.icon(
@@ -98,6 +76,25 @@ class AccountsPage extends ConsumerWidget {
                           ),
                       ],
                     ),
+            ),
+            const SizedBox(height: 18),
+            _EmergencyReserveCard(
+              state: state,
+              onCreate: () => _openAccountForm(
+                context,
+                ref,
+                isEmergencyReserve: true,
+                initialName: 'Reserva de emergência',
+                initialType: 'Conta digital',
+                suggestedReserveCents: state.suggestedEmergencyReserveCents,
+              ),
+              onEdit: (account) => _openAccountForm(
+                context,
+                ref,
+                account: account,
+                isEmergencyReserve: true,
+                suggestedReserveCents: state.suggestedEmergencyReserveCents,
+              ),
             ),
             if (state.accounts.isNotEmpty) ...[
               const SizedBox(height: 18),
@@ -124,6 +121,10 @@ class AccountsPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref, {
     AccountPreview? account,
+    bool isEmergencyReserve = false,
+    String? initialName,
+    String? initialType,
+    int? suggestedReserveCents,
   }) async {
     final viewModel = ref.read(accountsViewModelProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
@@ -139,10 +140,16 @@ class AccountsPage extends ConsumerWidget {
       builder: (context) {
         return _AccountFormSheet(
           account: account,
+          isEmergencyReserve:
+              isEmergencyReserve || account?.isEmergencyReserve == true,
+          initialName: initialName,
+          initialType: initialType,
+          suggestedReserveCents: suggestedReserveCents,
           onSubmit: ({
             required String name,
             required String type,
             required int balanceCents,
+            int? emergencyReserveTargetCents,
             required String color,
             String? bankName,
           }) async {
@@ -152,6 +159,7 @@ class AccountsPage extends ConsumerWidget {
                 type: type,
                 bankName: bankName,
                 initialBalance: balanceCents,
+                emergencyReserveTarget: emergencyReserveTargetCents,
                 color: color,
               );
             } else {
@@ -161,6 +169,7 @@ class AccountsPage extends ConsumerWidget {
                 type: type,
                 bankName: bankName,
                 balanceCents: balanceCents,
+                emergencyReserveTarget: emergencyReserveTargetCents,
                 color: color,
               );
             }
@@ -220,56 +229,283 @@ class _PageHeader extends StatelessWidget {
   }
 }
 
-class _AccountStatCard extends StatelessWidget {
-  const _AccountStatCard({
-    required this.icon,
-    required this.title,
+class _EmergencyReserveCard extends StatelessWidget {
+  const _EmergencyReserveCard({
+    required this.state,
+    required this.onCreate,
+    required this.onEdit,
+  });
+
+  final AccountsState state;
+  final VoidCallback onCreate;
+  final ValueChanged<AccountPreview> onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSuggestion = state.hasEmergencyReserveSuggestion;
+    final reserveAccount = state.emergencyReserveAccount;
+
+    if (reserveAccount != null) {
+      final targetCents = state.emergencyReserveTargetCents;
+      final remainingCents = (targetCents - reserveAccount.balanceCents)
+          .clamp(0, targetCents)
+          .toInt();
+
+      return SectionCard(
+        title: 'Reserva de emergência',
+        trailing: TextButton.icon(
+          onPressed: () => onEdit(reserveAccount),
+          icon: const Icon(Icons.edit_rounded, size: 18),
+          label: const Text('Editar'),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 25,
+                  backgroundColor: reserveAccount.color,
+                  foregroundColor: Colors.white,
+                  child: const Icon(Icons.shield_rounded),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        reserveAccount.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      Text(
+                        '${reserveAccount.type} • ${reserveAccount.bankName ?? 'Sem banco'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _ReserveDataBlock(
+                    label: 'Saldo reservado',
+                    value:
+                        CurrencyUtils.formatCents(reserveAccount.balanceCents),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ReserveDataBlock(
+                    label: 'Meta',
+                    value: targetCents > 0
+                        ? CurrencyUtils.formatCents(targetCents)
+                        : 'Definir',
+                  ),
+                ),
+              ],
+            ),
+            if (targetCents > 0) ...[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: state.emergencyReserveProgress,
+                  minHeight: 10,
+                  backgroundColor: AppColors.border,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.primaryLight,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                remainingCents == 0
+                    ? 'Meta alcançada.'
+                    : 'Faltam ${CurrencyUtils.formatCents(remainingCents)} para completar a reserva.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return SectionCard(
+      title: 'Reserva de emergência',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                foregroundColor: AppColors.primary,
+                child: const Icon(Icons.shield_rounded),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  hasSuggestion
+                      ? 'Uma reserva protege seu mês quando aparece um imprevisto. Pela sua média recente, esta é uma boa meta inicial.'
+                      : 'Comece separando uma conta para sua reserva. Quando houver mais despesas registradas, o app calcula uma meta automática.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (hasSuggestion) ...[
+            Text(
+              'Meta sugerida',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              CurrencyUtils.formatCents(
+                state.suggestedEmergencyReserveCents,
+              ),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: AppColors.primary,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Baseada em 6 meses de uma média de ${CurrencyUtils.formatCents(state.monthlyExpenseAverageCents)} em despesas pagas.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ] else ...[
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.mint,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.lightbulb_outline_rounded,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Use como referência uma meta entre 3 e 6 meses do seu custo de vida.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (state.emergencyReserveBalanceCents > 0) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Já reservado',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                Text(
+                  CurrencyUtils.formatCents(
+                    state.emergencyReserveBalanceCents,
+                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: state.emergencyReserveProgress,
+                minHeight: 9,
+                backgroundColor: AppColors.border,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryLight,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Criar reserva'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReserveDataBlock extends StatelessWidget {
+  const _ReserveDataBlock({
+    required this.label,
     required this.value,
   });
 
-  final IconData icon;
-  final String title;
+  final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(16),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            backgroundColor: AppColors.mint,
-            foregroundColor: AppColors.primary,
-            child: Icon(icon),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.primary,
+                  ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -445,14 +681,23 @@ class _AccountFormSheet extends StatefulWidget {
   const _AccountFormSheet({
     required this.onSubmit,
     this.account,
+    this.isEmergencyReserve = false,
+    this.initialName,
+    this.initialType,
+    this.suggestedReserveCents,
     this.onDelete,
   });
 
   final AccountPreview? account;
+  final bool isEmergencyReserve;
+  final String? initialName;
+  final String? initialType;
+  final int? suggestedReserveCents;
   final Future<void> Function({
     required String name,
     required String type,
     required int balanceCents,
+    int? emergencyReserveTargetCents,
     required String color,
     String? bankName,
   }) onSubmit;
@@ -483,6 +728,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
   late final TextEditingController _nameController;
   late final TextEditingController _bankNameController;
   late final TextEditingController _balanceController;
+  late final TextEditingController _reserveTargetController;
   late String _selectedType;
   late String _selectedColor;
   bool _isSubmitting = false;
@@ -491,16 +737,24 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
   void initState() {
     super.initState();
     final account = widget.account;
-    _nameController = TextEditingController(text: account?.name ?? '');
+    _nameController = TextEditingController(
+      text: account?.name ?? widget.initialName ?? '',
+    );
     _bankNameController = TextEditingController(text: account?.bankName ?? '');
     _balanceController = TextEditingController(
       text: account == null
           ? ''
           : CurrencyUtils.formatCents(account.balanceCents),
     );
+    _reserveTargetController = TextEditingController(
+      text: _initialReserveTargetText(account),
+    );
+    final initialType = widget.initialType;
     _selectedType = _accountTypes.contains(account?.type)
         ? account!.type
-        : _accountTypes.first;
+        : _accountTypes.contains(initialType)
+            ? initialType!
+            : _accountTypes.first;
     _selectedColor = account?.colorHex ?? _colors.first;
   }
 
@@ -509,12 +763,14 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
     _nameController.dispose();
     _bankNameController.dispose();
     _balanceController.dispose();
+    _reserveTargetController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
+    final isEmergencyReserve = widget.isEmergencyReserve;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -531,9 +787,44 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                account == null ? 'Nova conta' : 'Editar conta',
+                isEmergencyReserve
+                    ? account == null
+                        ? 'Nova reserva'
+                        : 'Editar reserva'
+                    : account == null
+                        ? 'Nova conta'
+                        : 'Editar conta',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+              if (isEmergencyReserve &&
+                  widget.suggestedReserveCents != null &&
+                  widget.suggestedReserveCents! > 0) ...[
+                const SizedBox(height: 14),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.mint,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.shield_rounded,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Meta sugerida: ${CurrencyUtils.formatCents(widget.suggestedReserveCents!)}. Você pode ajustar a meta antes de salvar.',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               TextFormField(
                 controller: _nameController,
@@ -593,6 +884,33 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                   return null;
                 },
               ),
+              if (isEmergencyReserve) ...[
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _reserveTargetController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Meta da reserva',
+                    hintText: 'Ex: 30000,00',
+                    helperText: widget.suggestedReserveCents != null &&
+                            widget.suggestedReserveCents! > 0
+                        ? 'Sugerida: ${CurrencyUtils.formatCents(widget.suggestedReserveCents!)}'
+                        : 'Defina quanto deseja acumular nesta reserva.',
+                    prefixIcon: const Icon(Icons.flag_rounded),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Informe a meta da reserva.';
+                    }
+                    if (CurrencyUtils.parseToCents(value) <= 0) {
+                      return 'A meta deve ser maior que zero.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
               Text('Cor', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
@@ -612,7 +930,13 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _isSubmitting ? null : _submit,
-                  child: Text(_isSubmitting ? 'Salvando...' : 'Salvar conta'),
+                  child: Text(
+                    _isSubmitting
+                        ? 'Salvando...'
+                        : isEmergencyReserve
+                            ? 'Salvar reserva'
+                            : 'Salvar conta',
+                  ),
                 ),
               ),
               if (widget.onDelete != null) ...[
@@ -650,6 +974,9 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
             : _bankNameController.text.trim(),
         type: _selectedType,
         balanceCents: CurrencyUtils.parseToCents(_balanceController.text),
+        emergencyReserveTargetCents: widget.isEmergencyReserve
+            ? CurrencyUtils.parseToCents(_reserveTargetController.text)
+            : null,
         color: _selectedColor,
       );
       if (mounted) {
@@ -700,6 +1027,22 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  String _initialReserveTargetText(AccountPreview? account) {
+    final currentTarget = account?.emergencyReserveTargetCents;
+    if (currentTarget != null && currentTarget > 0) {
+      return CurrencyUtils.formatCents(currentTarget);
+    }
+
+    final suggestedTarget = widget.suggestedReserveCents;
+    if (widget.isEmergencyReserve &&
+        suggestedTarget != null &&
+        suggestedTarget > 0) {
+      return CurrencyUtils.formatCents(suggestedTarget);
+    }
+
+    return '';
   }
 }
 

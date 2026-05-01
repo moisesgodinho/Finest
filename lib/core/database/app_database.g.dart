@@ -361,6 +361,12 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _emergencyReserveTargetMeta =
+      const VerificationMeta('emergencyReserveTarget');
+  @override
+  late final GeneratedColumn<int> emergencyReserveTarget = GeneratedColumn<int>(
+      'emergency_reserve_target', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _colorMeta = const VerificationMeta('color');
   @override
   late final GeneratedColumn<String> color = GeneratedColumn<String>(
@@ -398,6 +404,7 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         bankName,
         initialBalance,
         currentBalance,
+        emergencyReserveTarget,
         color,
         icon,
         createdAt,
@@ -450,6 +457,12 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
           currentBalance.isAcceptableOrUnknown(
               data['current_balance']!, _currentBalanceMeta));
     }
+    if (data.containsKey('emergency_reserve_target')) {
+      context.handle(
+          _emergencyReserveTargetMeta,
+          emergencyReserveTarget.isAcceptableOrUnknown(
+              data['emergency_reserve_target']!, _emergencyReserveTargetMeta));
+    }
     if (data.containsKey('color')) {
       context.handle(
           _colorMeta, color.isAcceptableOrUnknown(data['color']!, _colorMeta));
@@ -489,6 +502,8 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
           .read(DriftSqlType.int, data['${effectivePrefix}initial_balance'])!,
       currentBalance: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}current_balance'])!,
+      emergencyReserveTarget: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}emergency_reserve_target']),
       color: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}color'])!,
       icon: attachedDatabase.typeMapping
@@ -514,6 +529,7 @@ class Account extends DataClass implements Insertable<Account> {
   final String? bankName;
   final int initialBalance;
   final int currentBalance;
+  final int? emergencyReserveTarget;
   final String color;
   final String? icon;
   final DateTime createdAt;
@@ -526,6 +542,7 @@ class Account extends DataClass implements Insertable<Account> {
       this.bankName,
       required this.initialBalance,
       required this.currentBalance,
+      this.emergencyReserveTarget,
       required this.color,
       this.icon,
       required this.createdAt,
@@ -542,6 +559,9 @@ class Account extends DataClass implements Insertable<Account> {
     }
     map['initial_balance'] = Variable<int>(initialBalance);
     map['current_balance'] = Variable<int>(currentBalance);
+    if (!nullToAbsent || emergencyReserveTarget != null) {
+      map['emergency_reserve_target'] = Variable<int>(emergencyReserveTarget);
+    }
     map['color'] = Variable<String>(color);
     if (!nullToAbsent || icon != null) {
       map['icon'] = Variable<String>(icon);
@@ -562,6 +582,9 @@ class Account extends DataClass implements Insertable<Account> {
           : Value(bankName),
       initialBalance: Value(initialBalance),
       currentBalance: Value(currentBalance),
+      emergencyReserveTarget: emergencyReserveTarget == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emergencyReserveTarget),
       color: Value(color),
       icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
       createdAt: Value(createdAt),
@@ -580,6 +603,8 @@ class Account extends DataClass implements Insertable<Account> {
       bankName: serializer.fromJson<String?>(json['bankName']),
       initialBalance: serializer.fromJson<int>(json['initialBalance']),
       currentBalance: serializer.fromJson<int>(json['currentBalance']),
+      emergencyReserveTarget:
+          serializer.fromJson<int?>(json['emergencyReserveTarget']),
       color: serializer.fromJson<String>(json['color']),
       icon: serializer.fromJson<String?>(json['icon']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -597,6 +622,7 @@ class Account extends DataClass implements Insertable<Account> {
       'bankName': serializer.toJson<String?>(bankName),
       'initialBalance': serializer.toJson<int>(initialBalance),
       'currentBalance': serializer.toJson<int>(currentBalance),
+      'emergencyReserveTarget': serializer.toJson<int?>(emergencyReserveTarget),
       'color': serializer.toJson<String>(color),
       'icon': serializer.toJson<String?>(icon),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -612,6 +638,7 @@ class Account extends DataClass implements Insertable<Account> {
           Value<String?> bankName = const Value.absent(),
           int? initialBalance,
           int? currentBalance,
+          Value<int?> emergencyReserveTarget = const Value.absent(),
           String? color,
           Value<String?> icon = const Value.absent(),
           DateTime? createdAt,
@@ -624,6 +651,9 @@ class Account extends DataClass implements Insertable<Account> {
         bankName: bankName.present ? bankName.value : this.bankName,
         initialBalance: initialBalance ?? this.initialBalance,
         currentBalance: currentBalance ?? this.currentBalance,
+        emergencyReserveTarget: emergencyReserveTarget.present
+            ? emergencyReserveTarget.value
+            : this.emergencyReserveTarget,
         color: color ?? this.color,
         icon: icon.present ? icon.value : this.icon,
         createdAt: createdAt ?? this.createdAt,
@@ -642,6 +672,9 @@ class Account extends DataClass implements Insertable<Account> {
       currentBalance: data.currentBalance.present
           ? data.currentBalance.value
           : this.currentBalance,
+      emergencyReserveTarget: data.emergencyReserveTarget.present
+          ? data.emergencyReserveTarget.value
+          : this.emergencyReserveTarget,
       color: data.color.present ? data.color.value : this.color,
       icon: data.icon.present ? data.icon.value : this.icon,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -659,6 +692,7 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('bankName: $bankName, ')
           ..write('initialBalance: $initialBalance, ')
           ..write('currentBalance: $currentBalance, ')
+          ..write('emergencyReserveTarget: $emergencyReserveTarget, ')
           ..write('color: $color, ')
           ..write('icon: $icon, ')
           ..write('createdAt: $createdAt, ')
@@ -668,8 +702,19 @@ class Account extends DataClass implements Insertable<Account> {
   }
 
   @override
-  int get hashCode => Object.hash(id, userId, name, type, bankName,
-      initialBalance, currentBalance, color, icon, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      userId,
+      name,
+      type,
+      bankName,
+      initialBalance,
+      currentBalance,
+      emergencyReserveTarget,
+      color,
+      icon,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -681,6 +726,7 @@ class Account extends DataClass implements Insertable<Account> {
           other.bankName == this.bankName &&
           other.initialBalance == this.initialBalance &&
           other.currentBalance == this.currentBalance &&
+          other.emergencyReserveTarget == this.emergencyReserveTarget &&
           other.color == this.color &&
           other.icon == this.icon &&
           other.createdAt == this.createdAt &&
@@ -695,6 +741,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<String?> bankName;
   final Value<int> initialBalance;
   final Value<int> currentBalance;
+  final Value<int?> emergencyReserveTarget;
   final Value<String> color;
   final Value<String?> icon;
   final Value<DateTime> createdAt;
@@ -707,6 +754,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.bankName = const Value.absent(),
     this.initialBalance = const Value.absent(),
     this.currentBalance = const Value.absent(),
+    this.emergencyReserveTarget = const Value.absent(),
     this.color = const Value.absent(),
     this.icon = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -720,6 +768,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.bankName = const Value.absent(),
     this.initialBalance = const Value.absent(),
     this.currentBalance = const Value.absent(),
+    this.emergencyReserveTarget = const Value.absent(),
     this.color = const Value.absent(),
     this.icon = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -735,6 +784,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<String>? bankName,
     Expression<int>? initialBalance,
     Expression<int>? currentBalance,
+    Expression<int>? emergencyReserveTarget,
     Expression<String>? color,
     Expression<String>? icon,
     Expression<DateTime>? createdAt,
@@ -748,6 +798,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (bankName != null) 'bank_name': bankName,
       if (initialBalance != null) 'initial_balance': initialBalance,
       if (currentBalance != null) 'current_balance': currentBalance,
+      if (emergencyReserveTarget != null)
+        'emergency_reserve_target': emergencyReserveTarget,
       if (color != null) 'color': color,
       if (icon != null) 'icon': icon,
       if (createdAt != null) 'created_at': createdAt,
@@ -763,6 +815,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       Value<String?>? bankName,
       Value<int>? initialBalance,
       Value<int>? currentBalance,
+      Value<int?>? emergencyReserveTarget,
       Value<String>? color,
       Value<String?>? icon,
       Value<DateTime>? createdAt,
@@ -775,6 +828,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       bankName: bankName ?? this.bankName,
       initialBalance: initialBalance ?? this.initialBalance,
       currentBalance: currentBalance ?? this.currentBalance,
+      emergencyReserveTarget:
+          emergencyReserveTarget ?? this.emergencyReserveTarget,
       color: color ?? this.color,
       icon: icon ?? this.icon,
       createdAt: createdAt ?? this.createdAt,
@@ -806,6 +861,10 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (currentBalance.present) {
       map['current_balance'] = Variable<int>(currentBalance.value);
     }
+    if (emergencyReserveTarget.present) {
+      map['emergency_reserve_target'] =
+          Variable<int>(emergencyReserveTarget.value);
+    }
     if (color.present) {
       map['color'] = Variable<String>(color.value);
     }
@@ -831,6 +890,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('bankName: $bankName, ')
           ..write('initialBalance: $initialBalance, ')
           ..write('currentBalance: $currentBalance, ')
+          ..write('emergencyReserveTarget: $emergencyReserveTarget, ')
           ..write('color: $color, ')
           ..write('icon: $icon, ')
           ..write('createdAt: $createdAt, ')
@@ -7599,6 +7659,7 @@ typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   Value<String?> bankName,
   Value<int> initialBalance,
   Value<int> currentBalance,
+  Value<int?> emergencyReserveTarget,
   Value<String> color,
   Value<String?> icon,
   Value<DateTime> createdAt,
@@ -7612,6 +7673,7 @@ typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<String?> bankName,
   Value<int> initialBalance,
   Value<int> currentBalance,
+  Value<int?> emergencyReserveTarget,
   Value<String> color,
   Value<String?> icon,
   Value<DateTime> createdAt,
@@ -7762,6 +7824,10 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<int> get currentBalance => $composableBuilder(
       column: $table.currentBalance,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get emergencyReserveTarget => $composableBuilder(
+      column: $table.emergencyReserveTarget,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get color => $composableBuilder(
@@ -7954,6 +8020,10 @@ class $$AccountsTableOrderingComposer
       column: $table.currentBalance,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get emergencyReserveTarget => $composableBuilder(
+      column: $table.emergencyReserveTarget,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get color => $composableBuilder(
       column: $table.color, builder: (column) => ColumnOrderings(column));
 
@@ -8013,6 +8083,9 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<int> get currentBalance => $composableBuilder(
       column: $table.currentBalance, builder: (column) => column);
+
+  GeneratedColumn<int> get emergencyReserveTarget => $composableBuilder(
+      column: $table.emergencyReserveTarget, builder: (column) => column);
 
   GeneratedColumn<String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
@@ -8213,6 +8286,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             Value<String?> bankName = const Value.absent(),
             Value<int> initialBalance = const Value.absent(),
             Value<int> currentBalance = const Value.absent(),
+            Value<int?> emergencyReserveTarget = const Value.absent(),
             Value<String> color = const Value.absent(),
             Value<String?> icon = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -8226,6 +8300,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             bankName: bankName,
             initialBalance: initialBalance,
             currentBalance: currentBalance,
+            emergencyReserveTarget: emergencyReserveTarget,
             color: color,
             icon: icon,
             createdAt: createdAt,
@@ -8239,6 +8314,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             Value<String?> bankName = const Value.absent(),
             Value<int> initialBalance = const Value.absent(),
             Value<int> currentBalance = const Value.absent(),
+            Value<int?> emergencyReserveTarget = const Value.absent(),
             Value<String> color = const Value.absent(),
             Value<String?> icon = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -8252,6 +8328,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             bankName: bankName,
             initialBalance: initialBalance,
             currentBalance: currentBalance,
+            emergencyReserveTarget: emergencyReserveTarget,
             color: color,
             icon: icon,
             createdAt: createdAt,
