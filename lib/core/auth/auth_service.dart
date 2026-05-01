@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/app_user.dart';
+import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/user_repository.dart';
 
 enum SocialAuthProvider {
   google,
@@ -21,13 +24,33 @@ abstract class AuthService {
   Future<void> signOut();
 }
 
-class MockAuthService implements AuthService {
-  AppUser? _currentUser;
+class LocalAuthService implements AuthService {
+  const LocalAuthService({
+    required UserRepository userRepository,
+    required CategoryRepository categoryRepository,
+  })  : _userRepository = userRepository,
+        _categoryRepository = categoryRepository;
+
+  static const _sessionUserIdKey = 'finance_pet.session_user_id';
+
+  final UserRepository _userRepository;
+  final CategoryRepository _categoryRepository;
 
   @override
   Future<AppUser?> currentUser() async {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    return _currentUser;
+    final preferences = await SharedPreferences.getInstance();
+    final userId = preferences.getInt(_sessionUserIdKey);
+    if (userId == null) {
+      return null;
+    }
+
+    final user = await _userRepository.findById(userId);
+    if (user == null) {
+      await preferences.remove(_sessionUserIdKey);
+    } else {
+      await _categoryRepository.ensureDefaultCategories(user.id);
+    }
+    return user;
   }
 
   @override
@@ -35,36 +58,61 @@ class MockAuthService implements AuthService {
     required String email,
     required String password,
   }) async {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-
-    if (email.trim().isEmpty || password.trim().isEmpty) {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty || password.trim().isEmpty) {
       throw AuthException('Informe email e senha para continuar.');
     }
 
-    _currentUser = AppUser(
-      id: 1,
-      name: 'Camila Souza',
-      email: email.trim(),
+    final user = await _userRepository.findOrCreate(
+      name: _nameFromEmail(normalizedEmail),
+      email: normalizedEmail,
     );
-    return _currentUser!;
+    await _categoryRepository.ensureDefaultCategories(user.id);
+    await _saveSession(user.id);
+    return user;
   }
 
   @override
   Future<AppUser> signInWithProvider(SocialAuthProvider provider) async {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-
-    _currentUser = const AppUser(
-      id: 1,
-      name: 'Camila Souza',
-      email: 'camila@email.com',
+    final user = await _userRepository.findOrCreate(
+      name: _providerDisplayName(provider),
+      email: '${provider.name}@financepet.local',
     );
-    return _currentUser!;
+    await _categoryRepository.ensureDefaultCategories(user.id);
+    await _saveSession(user.id);
+    return user;
   }
 
   @override
   Future<void> signOut() async {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    _currentUser = null;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_sessionUserIdKey);
+  }
+
+  Future<void> _saveSession(int userId) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt(_sessionUserIdKey, userId);
+  }
+
+  String _nameFromEmail(String email) {
+    final namePart = email.split('@').first.replaceAll('.', ' ').trim();
+    if (namePart.isEmpty) {
+      return 'Usuário FinancePet';
+    }
+
+    return namePart
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
+  }
+
+  String _providerDisplayName(SocialAuthProvider provider) {
+    return switch (provider) {
+      SocialAuthProvider.google => 'Usuário Google',
+      SocialAuthProvider.apple => 'Usuário Apple',
+      SocialAuthProvider.facebook => 'Usuário Facebook',
+    };
   }
 }
 
@@ -106,7 +154,9 @@ class AuthState {
 }
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._authService) : super(const AuthState());
+  AuthController(this._authService) : super(const AuthState(isLoading: true)) {
+    restoreSession();
+  }
 
   final AuthService _authService;
 
@@ -156,7 +206,10 @@ class AuthController extends StateNotifier<AuthState> {
 }
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  return MockAuthService();
+  return LocalAuthService(
+    userRepository: ref.watch(userRepositoryProvider),
+    categoryRepository: ref.watch(categoryRepositoryProvider),
+  );
 });
 
 final authStateProvider = StateNotifierProvider<AuthController, AuthState>((

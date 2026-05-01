@@ -26,14 +26,27 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     return query.get();
   }
 
+  Future<FinanceTransaction?> findByIdForUser({
+    required int id,
+    required int userId,
+  }) {
+    return (select(financialTransactions)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .getSingleOrNull();
+  }
+
   Future<int> insertTransaction(
     FinancialTransactionsCompanion transaction,
   ) {
     return into(financialTransactions).insert(transaction);
   }
 
-  Future<int> deleteTransaction(int id) {
-    return (delete(financialTransactions)..where((table) => table.id.equals(id)))
+  Future<int> deleteTransaction({
+    required int id,
+    required int userId,
+  }) {
+    return (delete(financialTransactions)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
         .go();
   }
 }

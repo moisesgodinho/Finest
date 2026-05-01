@@ -38,7 +38,8 @@ class DriveBackupService implements BackupService {
     try {
       // TODO: Validar versao do schema e restaurar o arquivo SQLite com seguranca.
       if (!backupFile.existsSync()) {
-        throw FileSystemException('Backup local nao encontrado.', backupFile.path);
+        throw FileSystemException(
+            'Backup local nao encontrado.', backupFile.path);
       }
       return Result.success(null);
     } catch (error, stackTrace) {
@@ -54,7 +55,8 @@ class DriveBackupService implements BackupService {
     try {
       // TODO: Integrar Google Sign-In e Google Drive API para enviar o backup.
       if (!backupFile.existsSync()) {
-        throw FileSystemException('Backup local nao encontrado.', backupFile.path);
+        throw FileSystemException(
+            'Backup local nao encontrado.', backupFile.path);
       }
       return Result.success('mock-drive-file-id');
     } catch (error, stackTrace) {
@@ -69,7 +71,8 @@ class DriveBackupService implements BackupService {
   }) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final file = File(p.join(directory.path, 'backups', '$driveFileId.backup'));
+      final file =
+          File(p.join(directory.path, 'backups', '$driveFileId.backup'));
 
       // TODO: Baixar o arquivo real do Google Drive e salvar localmente.
       await file.create(recursive: true);

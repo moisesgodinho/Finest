@@ -369,7 +369,7 @@ class _CreditCardSummary extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppColors.purple,
+                  backgroundColor: card.color,
                   child: Text(
                     card.name.substring(0, 2).toLowerCase(),
                     style: const TextStyle(
@@ -420,7 +420,7 @@ class _CreditCardSummary extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Vencimento ${card.dueDay}/06',
+              'Vencimento dia ${card.dueDay}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white70,
                   ),
@@ -541,7 +541,8 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = transaction.isIncome ? AppColors.success : AppColors.textPrimary;
+    final color =
+        transaction.isIncome ? AppColors.success : AppColors.textPrimary;
     final prefix = transaction.isIncome ? '+ ' : '- ';
 
     return Padding(

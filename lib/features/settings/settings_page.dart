@@ -27,7 +27,8 @@ class SettingsPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Mais', style: Theme.of(context).textTheme.headlineMedium),
+                      Text('Mais',
+                          style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 4),
                       Text(
                         'Conta e preferências',

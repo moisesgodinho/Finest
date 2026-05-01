@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 
-class AccountPreview {
-  const AccountPreview({
+class CategoryModel {
+  const CategoryModel({
     required this.id,
     required this.name,
     required this.type,
-    required this.balanceCents,
+    required this.icon,
     required this.color,
     required this.colorHex,
-    this.bankName,
-    this.lastDigits,
   });
 
   final int id;
   final String name;
   final String type;
-  final String? bankName;
-  final String? lastDigits;
-  final int balanceCents;
+  final IconData icon;
   final Color color;
   final String colorHex;
 }

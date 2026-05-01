@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/app_database.dart';
 import '../models/create_account_request.dart';
+import '../models/update_account_request.dart';
 
 abstract class AccountRepository {
   Stream<List<Account>> watchAccounts(int userId);
@@ -10,6 +11,13 @@ abstract class AccountRepository {
   Future<List<Account>> findAccounts(int userId);
 
   Future<int> createAccount(CreateAccountRequest request);
+
+  Future<void> updateAccount(UpdateAccountRequest request);
+
+  Future<void> deleteAccount({
+    required int userId,
+    required int accountId,
+  });
 
   Future<int> totalBalanceCents(int userId);
 }
@@ -47,6 +55,43 @@ class DriftAccountRepository implements AccountRepository {
         updatedAt: Value(now),
       ),
     );
+  }
+
+  @override
+  Future<void> updateAccount(UpdateAccountRequest request) async {
+    final affectedRows = await _database.accountsDao.updateAccount(
+      id: request.id,
+      userId: request.userId,
+      account: AccountsCompanion(
+        name: Value(request.name),
+        type: Value(request.type),
+        bankName: Value(request.bankName),
+        initialBalance: Value(request.initialBalance),
+        currentBalance: Value(request.currentBalance),
+        color: Value(request.color),
+        icon: Value(request.icon),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    if (affectedRows == 0) {
+      throw StateError('Conta não encontrada para atualização.');
+    }
+  }
+
+  @override
+  Future<void> deleteAccount({
+    required int userId,
+    required int accountId,
+  }) async {
+    final affectedRows = await _database.accountsDao.deleteAccount(
+      id: accountId,
+      userId: userId,
+    );
+
+    if (affectedRows == 0) {
+      throw StateError('Conta não encontrada para remoção.');
+    }
   }
 
   @override

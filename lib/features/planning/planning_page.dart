@@ -20,7 +20,8 @@ class PlanningPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _PlanningHeader(monthLabel: AppDateUtils.monthYearLabel(DateTime.now())),
+            _PlanningHeader(
+                monthLabel: AppDateUtils.monthYearLabel(DateTime.now())),
             const SizedBox(height: 20),
             _PlanningProgressCard(state: state),
             const SizedBox(height: 18),
@@ -29,7 +30,8 @@ class PlanningPage extends ConsumerWidget {
                 Expanded(
                   child: _PlanningMetric(
                     title: 'Orçamento disponível',
-                    value: CurrencyUtils.formatCents(state.availableBudgetCents),
+                    value:
+                        CurrencyUtils.formatCents(state.availableBudgetCents),
                     icon: Icons.account_balance_wallet_rounded,
                     color: AppColors.success,
                   ),
@@ -314,7 +316,8 @@ class _BillRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(bill.name, style: Theme.of(context).textTheme.bodyLarge),
-                Text(bill.dueLabel, style: Theme.of(context).textTheme.bodyMedium),
+                Text(bill.dueLabel,
+                    style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),

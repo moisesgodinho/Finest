@@ -31,15 +31,50 @@ class AccountsDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  Future<Account?> findByIdForUser({
+    required int id,
+    required int userId,
+  }) {
+    return (select(accounts)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .getSingleOrNull();
+  }
+
   Future<int> insertAccount(AccountsCompanion account) {
     return into(accounts).insert(account);
   }
 
-  Future<bool> updateAccount(AccountsCompanion account) {
-    return update(accounts).replace(account);
+  Future<int> updateAccount({
+    required int id,
+    required int userId,
+    required AccountsCompanion account,
+  }) {
+    return (update(accounts)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(account);
   }
 
-  Future<int> deleteAccount(int id) {
-    return (delete(accounts)..where((table) => table.id.equals(id))).go();
+  Future<int> updateCurrentBalance({
+    required int id,
+    required int userId,
+    required int currentBalance,
+  }) {
+    return (update(accounts)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(
+      AccountsCompanion(
+        currentBalance: Value(currentBalance),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<int> deleteAccount({
+    required int id,
+    required int userId,
+  }) {
+    return (delete(accounts)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .go();
   }
 }

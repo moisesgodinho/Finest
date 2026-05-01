@@ -69,7 +69,7 @@ class BalanceCard extends StatelessWidget {
                         onPressed: onToggleVisibility,
                         color: Colors.white,
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.12),
+                          backgroundColor: Colors.white.withValues(alpha: 0.38),
                         ),
                         icon: Icon(
                           isVisible
