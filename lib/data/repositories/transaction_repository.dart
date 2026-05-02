@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../models/create_transaction_request.dart';
 import '../models/update_credit_card_expense_request.dart';
+import '../models/update_transaction_request.dart';
 
 abstract class TransactionRepository {
   Stream<List<FinanceTransaction>> watchTransactions(int userId);
@@ -16,6 +17,8 @@ abstract class TransactionRepository {
     required int userId,
     required int transactionId,
   });
+
+  Future<void> updateTransaction(UpdateTransactionRequest request);
 
   Future<void> updateCreditCardExpense(UpdateCreditCardExpenseRequest request);
 
@@ -233,6 +236,127 @@ class DriftTransactionRepository implements TransactionRepository {
         id: transactionId,
         userId: userId,
         isPaid: true,
+      );
+      if (affectedRows == 0) {
+        throw StateError('Lançamento não atualizado.');
+      }
+    });
+  }
+
+  @override
+  Future<void> updateTransaction(UpdateTransactionRequest request) async {
+    _validateTransactionFields(
+      description: request.description,
+      amountCents: request.amountCents,
+      type: request.type,
+      transactionKind: request.transactionKind,
+      totalInstallments: request.totalInstallments,
+    );
+
+    await _database.transaction(() async {
+      final transaction = await _database.transactionsDao.findByIdForUser(
+        id: request.transactionId,
+        userId: request.userId,
+      );
+      if (transaction == null) {
+        throw StateError('Lançamento não encontrado.');
+      }
+      if (transaction.paymentMethod == 'credit_card') {
+        throw StateError('Edite compras no cartão pela fatura.');
+      }
+
+      final account = await _database.accountsDao.findByIdForUser(
+        id: request.accountId,
+        userId: request.userId,
+      );
+      if (account == null) {
+        throw StateError('Conta não encontrada.');
+      }
+
+      final category = await _database.categoriesDao.findByIdForUser(
+        id: request.categoryId,
+        userId: request.userId,
+      );
+      if (category == null) {
+        throw StateError('Categoria não encontrada.');
+      }
+      if (category.type != request.type) {
+        throw StateError('Categoria incompatível com o tipo de lançamento.');
+      }
+
+      if (request.subcategoryId != null) {
+        final subcategory =
+            await _database.categoriesDao.findSubcategoryByIdForUser(
+          id: request.subcategoryId!,
+          userId: request.userId,
+        );
+        if (subcategory == null || subcategory.categoryId != category.id) {
+          throw StateError('Subcategoria incompatível com a categoria.');
+        }
+      }
+
+      final accountDeltas = <int, int>{};
+      if (transaction.isPaid) {
+        _addAccountDelta(
+          accountDeltas,
+          transaction.accountId,
+          -_transactionDelta(transaction),
+        );
+      }
+      if (request.isPaid) {
+        _addAccountDelta(
+          accountDeltas,
+          request.accountId,
+          _requestDelta(request),
+        );
+      }
+
+      for (final entry in accountDeltas.entries) {
+        if (entry.value == 0) {
+          continue;
+        }
+        final balanceAccount = await _database.accountsDao.findByIdForUser(
+          id: entry.key,
+          userId: request.userId,
+        );
+        if (balanceAccount == null) {
+          throw StateError('Conta não encontrada.');
+        }
+        await _database.accountsDao.updateCurrentBalance(
+          id: balanceAccount.id,
+          userId: request.userId,
+          currentBalance: balanceAccount.currentBalance + entry.value,
+        );
+      }
+
+      final kind = request.transactionKind;
+      final isInstallment = kind == 'installment';
+      final affectedRows = await _database.transactionsDao.updateTransaction(
+        id: transaction.id,
+        userId: request.userId,
+        transaction: FinancialTransactionsCompanion(
+          accountId: Value(request.accountId),
+          categoryId: Value(request.categoryId),
+          subcategoryId: Value(request.subcategoryId),
+          type: Value(request.type),
+          description: Value(request.description.trim()),
+          amount: Value(request.amountCents),
+          date: Value(request.date),
+          dueDate: Value(request.dueDate),
+          expenseKind: Value(kind),
+          installmentNumber: Value(
+            isInstallment
+                ? request.installmentNumber ??
+                    transaction.installmentNumber ??
+                    1
+                : null,
+          ),
+          totalInstallments:
+              Value(isInstallment ? request.totalInstallments : null),
+          isPaid: Value(request.isPaid),
+          isRecurring: Value(kind == 'fixed_monthly'),
+          updatedAt: Value(DateTime.now()),
+        ),
       );
       if (affectedRows == 0) {
         throw StateError('Lançamento não atualizado.');
@@ -468,11 +592,51 @@ class DriftTransactionRepository implements TransactionRepository {
         : -request.amountCents;
   }
 
+  int _requestDelta(UpdateTransactionRequest request) {
+    return request.type == 'income'
+        ? request.amountCents
+        : -request.amountCents;
+  }
+
   int _transactionDelta(FinanceTransaction transaction) {
     return transaction.type == 'income'
         ? transaction.amount
         : -transaction.amount;
   }
+
+  void _addAccountDelta(Map<int, int> deltas, int accountId, int delta) {
+    deltas[accountId] = (deltas[accountId] ?? 0) + delta;
+  }
+
+  void _validateTransactionFields({
+    required String description,
+    required int amountCents,
+    required String type,
+    String? transactionKind,
+    int? totalInstallments,
+  }) {
+    if (description.trim().isEmpty) {
+      throw ArgumentError('Informe a descrição do lançamento.');
+    }
+    if (amountCents <= 0) {
+      throw ArgumentError('O valor do lançamento deve ser maior que zero.');
+    }
+    if (type != 'income' && type != 'expense') {
+      throw ArgumentError('Tipo de lançamento inválido.');
+    }
+    if (transactionKind != null && !_validKinds.contains(transactionKind)) {
+      throw ArgumentError('Recorrência inválida.');
+    }
+    if (transactionKind == 'installment' && ((totalInstallments ?? 0) < 2)) {
+      throw ArgumentError('Informe 2 parcelas ou mais.');
+    }
+  }
+
+  static const _validKinds = {
+    'single',
+    'installment',
+    'fixed_monthly',
+  };
 
   DateTime _invoiceDueDate({
     required int month,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login/login_page.dart';
+import '../../features/categories/categories_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/investments/investments_page.dart';
 import '../../features/pet/pet_page.dart';
@@ -14,6 +15,7 @@ class AppRoutes {
   static const root = '/';
   static const login = '/login';
   static const home = '/home';
+  static const categories = '/categories';
   static const transactions = '/transactions';
   static const investments = '/investments';
   static const pet = '/pet';
@@ -54,6 +56,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.home,
         name: 'home',
         builder: (context, state) => const HomePage(),
+      ),
+      GoRoute(
+        path: AppRoutes.categories,
+        name: 'categories',
+        builder: (context, state) => const CategoriesPage(),
       ),
       GoRoute(
         path: AppRoutes.transactions,

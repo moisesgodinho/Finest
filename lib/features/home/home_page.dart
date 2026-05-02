@@ -328,7 +328,10 @@ class _HomeDashboard extends ConsumerWidget {
             const SizedBox(height: 18),
             _ResponsiveSummarySection(state: state),
             const SizedBox(height: 18),
-            _CategoriesCard(categories: state.categories),
+            _CategoriesCard(
+              categories: state.categories,
+              onViewReport: () => context.push(AppRoutes.categories),
+            ),
             const SizedBox(height: 18),
             _RecentTransactionsCard(transactions: state.recentTransactions),
             const SizedBox(height: 18),
@@ -908,15 +911,22 @@ class _CreditCardSummary extends StatelessWidget {
 }
 
 class _CategoriesCard extends StatelessWidget {
-  const _CategoriesCard({required this.categories});
+  const _CategoriesCard({
+    required this.categories,
+    required this.onViewReport,
+  });
 
   final List<CategoryExpensePreview> categories;
+  final VoidCallback onViewReport;
 
   @override
   Widget build(BuildContext context) {
     return SectionCard(
       title: 'Gastos por categoria',
-      trailing: const _SectionAction(label: 'Relatório'),
+      trailing: _SectionAction(
+        label: 'Relatório',
+        onTap: onViewReport,
+      ),
       child: categories.isEmpty
           ? const _EmptySectionMessage(
               icon: Icons.pie_chart_outline_rounded,
@@ -1035,7 +1045,10 @@ class _RecentTransactionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SectionCard(
       title: 'Últimos lançamentos',
-      trailing: const _SectionAction(label: 'Ver todos'),
+      trailing: _SectionAction(
+        label: 'Ver todos',
+        onTap: () => context.push(AppRoutes.transactions),
+      ),
       child: transactions.isEmpty
           ? const _EmptySectionMessage(
               icon: Icons.receipt_long_outlined,
@@ -1207,23 +1220,34 @@ class _QuickActionButton extends StatelessWidget {
 }
 
 class _SectionAction extends StatelessWidget {
-  const _SectionAction({required this.label});
+  const _SectionAction({
+    required this.label,
+    this.onTap,
+  });
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
+          ],
         ),
-        Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
-      ],
+      ),
     );
   }
 }

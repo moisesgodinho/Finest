@@ -39,6 +39,31 @@ class TransfersDao extends DatabaseAccessor<AppDatabase>
     return into(transfers).insert(transfer);
   }
 
+  Future<int> updatePaymentStatus({
+    required int id,
+    required int userId,
+    required bool isPaid,
+  }) {
+    return (update(transfers)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(
+      TransfersCompanion(
+        isPaid: Value(isPaid),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<int> updateTransfer({
+    required int id,
+    required int userId,
+    required TransfersCompanion transfer,
+  }) {
+    return (update(transfers)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(transfer);
+  }
+
   Future<int> deleteTransfer({
     required int id,
     required int userId,

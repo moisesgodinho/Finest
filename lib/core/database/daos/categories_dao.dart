@@ -73,6 +73,25 @@ class CategoriesDao extends DatabaseAccessor<AppDatabase>
     return into(categories).insert(category);
   }
 
+  Future<int> updateCategory({
+    required int id,
+    required int userId,
+    required CategoriesCompanion category,
+  }) {
+    return (update(categories)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(category);
+  }
+
+  Future<int> deleteCategory({
+    required int id,
+    required int userId,
+  }) {
+    return (delete(categories)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .go();
+  }
+
   Stream<List<Subcategory>> watchSubcategoriesByUser(int userId) {
     final query = select(subcategories)
       ..where((table) => table.userId.equals(userId))
@@ -106,5 +125,24 @@ class CategoriesDao extends DatabaseAccessor<AppDatabase>
 
   Future<int> insertSubcategory(SubcategoriesCompanion subcategory) {
     return into(subcategories).insert(subcategory);
+  }
+
+  Future<int> updateSubcategory({
+    required int id,
+    required int userId,
+    required SubcategoriesCompanion subcategory,
+  }) {
+    return (update(subcategories)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(subcategory);
+  }
+
+  Future<int> deleteSubcategory({
+    required int id,
+    required int userId,
+  }) {
+    return (delete(subcategories)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .go();
   }
 }

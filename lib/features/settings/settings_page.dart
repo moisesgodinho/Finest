@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/routing/app_router.dart';
 import '../../core/auth/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_controller.dart';
@@ -59,23 +61,24 @@ class SettingsPage extends ConsumerWidget {
             Wrap(
               spacing: 12,
               runSpacing: 12,
-              children: const [
+              children: [
                 _SettingsShortcut(
                   icon: Icons.folder_copy_outlined,
                   title: 'Categorias',
                   subtitle: 'Receitas e despesas',
+                  onTap: () => context.push(AppRoutes.categories),
                 ),
-                _SettingsShortcut(
+                const _SettingsShortcut(
                   icon: Icons.flag_outlined,
                   title: 'Metas',
                   subtitle: 'Objetivos e reservas',
                 ),
-                _SettingsShortcut(
+                const _SettingsShortcut(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Contas e cartões',
                   subtitle: 'Vinculados',
                 ),
-                _SettingsShortcut(
+                const _SettingsShortcut(
                   icon: Icons.bar_chart_rounded,
                   title: 'Relatórios',
                   subtitle: 'Resumo mensal',
@@ -101,10 +104,11 @@ class SettingsPage extends ConsumerWidget {
                     value: settings.hideValues,
                     onChanged: viewModel.toggleHideValues,
                   ),
-                  const _SettingTile(
+                  _SettingTile(
                     icon: Icons.sell_outlined,
                     title: 'Categorias personalizadas',
                     subtitle: 'Editar categorias do app',
+                    onTap: () => context.push(AppRoutes.categories),
                   ),
                   _SettingTile(
                     icon: Icons.palette_outlined,
@@ -287,58 +291,65 @@ class _SettingsShortcut extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Container(
-      width: 166,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: colors.accentSoft,
-            foregroundColor: colors.primary,
-            child: Icon(icon),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 166,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color:
+                  colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: colors.accentSoft,
+              foregroundColor: colors.primary,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

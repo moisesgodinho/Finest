@@ -8,6 +8,7 @@ class CategoryModel {
     required this.icon,
     required this.color,
     required this.colorHex,
+    this.iconName = 'category',
   });
 
   final int id;
@@ -16,4 +17,5 @@ class CategoryModel {
   final IconData icon;
   final Color color;
   final String colorHex;
+  final String iconName;
 }

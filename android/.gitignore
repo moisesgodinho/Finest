@@ -1,6 +1,18 @@
-gradle-wrapper.jar
 /.gradle/
 /captures/
 /local.properties
 /app/build/
 /build/
+/app/debug/
+/app/profile/
+/app/release/
+
+# Signing and local secrets
+key.properties
+*.jks
+*.keystore
+
+# Build artifacts
+*.apk
+*.aab
+*.apks

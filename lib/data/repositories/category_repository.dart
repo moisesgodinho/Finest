@@ -29,10 +29,42 @@ abstract class CategoryRepository {
     required String name,
   });
 
+  Future<int> createCategory({
+    required int userId,
+    required String name,
+    required String type,
+    required String icon,
+    required String color,
+  });
+
+  Future<void> updateCategory({
+    required int userId,
+    required int categoryId,
+    required String name,
+    required String icon,
+    required String color,
+  });
+
+  Future<void> deleteCategory({
+    required int userId,
+    required int categoryId,
+  });
+
   Future<int> createSubcategory({
     required int userId,
     required int categoryId,
     required String name,
+  });
+
+  Future<void> updateSubcategory({
+    required int userId,
+    required int subcategoryId,
+    required String name,
+  });
+
+  Future<void> deleteSubcategory({
+    required int userId,
+    required int subcategoryId,
   });
 
   Future<void> ensureDefaultCategories(int userId);
@@ -103,17 +135,26 @@ class DriftCategoryRepository implements CategoryRepository {
     );
   }
 
-  Future<int> _createCategory({
+  @override
+  Future<int> createCategory({
     required int userId,
     required String name,
     required String type,
     required String icon,
     required String color,
-  }) {
+  }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
       throw ArgumentError('Informe o nome da categoria.');
     }
+    if (type != 'income' && type != 'expense') {
+      throw ArgumentError('Tipo de categoria inválido.');
+    }
+    await _ensureCategoryNameIsAvailable(
+      userId: userId,
+      type: type,
+      name: trimmedName,
+    );
 
     final now = DateTime.now();
     return _database.categoriesDao.insertCategory(
@@ -127,6 +168,78 @@ class DriftCategoryRepository implements CategoryRepository {
         updatedAt: Value(now),
       ),
     );
+  }
+
+  Future<int> _createCategory({
+    required int userId,
+    required String name,
+    required String type,
+    required String icon,
+    required String color,
+  }) {
+    return createCategory(
+      userId: userId,
+      name: name,
+      type: type,
+      icon: icon,
+      color: color,
+    );
+  }
+
+  @override
+  Future<void> updateCategory({
+    required int userId,
+    required int categoryId,
+    required String name,
+    required String icon,
+    required String color,
+  }) async {
+    final category = await _database.categoriesDao.findByIdForUser(
+      id: categoryId,
+      userId: userId,
+    );
+    if (category == null) {
+      throw StateError('Categoria não encontrada.');
+    }
+
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Informe o nome da categoria.');
+    }
+    await _ensureCategoryNameIsAvailable(
+      userId: userId,
+      type: category.type,
+      name: trimmedName,
+      exceptCategoryId: categoryId,
+    );
+
+    final affectedRows = await _database.categoriesDao.updateCategory(
+      id: categoryId,
+      userId: userId,
+      category: CategoriesCompanion(
+        name: Value(trimmedName),
+        icon: Value(icon),
+        color: Value(color),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    if (affectedRows == 0) {
+      throw StateError('Categoria não atualizada.');
+    }
+  }
+
+  @override
+  Future<void> deleteCategory({
+    required int userId,
+    required int categoryId,
+  }) async {
+    final affectedRows = await _database.categoriesDao.deleteCategory(
+      id: categoryId,
+      userId: userId,
+    );
+    if (affectedRows == 0) {
+      throw StateError('Categoria não encontrada.');
+    }
   }
 
   @override
@@ -147,6 +260,11 @@ class DriftCategoryRepository implements CategoryRepository {
     if (category == null) {
       throw StateError('Categoria não encontrada.');
     }
+    await _ensureSubcategoryNameIsAvailable(
+      userId: userId,
+      categoryId: categoryId,
+      name: trimmedName,
+    );
 
     final now = DateTime.now();
     return _database.categoriesDao.insertSubcategory(
@@ -158,6 +276,59 @@ class DriftCategoryRepository implements CategoryRepository {
         updatedAt: Value(now),
       ),
     );
+  }
+
+  @override
+  Future<void> updateSubcategory({
+    required int userId,
+    required int subcategoryId,
+    required String name,
+  }) async {
+    final subcategory =
+        await _database.categoriesDao.findSubcategoryByIdForUser(
+      id: subcategoryId,
+      userId: userId,
+    );
+    if (subcategory == null) {
+      throw StateError('Subcategoria não encontrada.');
+    }
+
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Informe o nome da subcategoria.');
+    }
+    await _ensureSubcategoryNameIsAvailable(
+      userId: userId,
+      categoryId: subcategory.categoryId,
+      name: trimmedName,
+      exceptSubcategoryId: subcategoryId,
+    );
+
+    final affectedRows = await _database.categoriesDao.updateSubcategory(
+      id: subcategoryId,
+      userId: userId,
+      subcategory: SubcategoriesCompanion(
+        name: Value(trimmedName),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    if (affectedRows == 0) {
+      throw StateError('Subcategoria não atualizada.');
+    }
+  }
+
+  @override
+  Future<void> deleteSubcategory({
+    required int userId,
+    required int subcategoryId,
+  }) async {
+    final affectedRows = await _database.categoriesDao.deleteSubcategory(
+      id: subcategoryId,
+      userId: userId,
+    );
+    if (affectedRows == 0) {
+      throw StateError('Subcategoria não encontrada.');
+    }
   }
 
   @override
@@ -190,6 +361,7 @@ class DriftCategoryRepository implements CategoryRepository {
       icon: _iconFromName(category.icon),
       color: _colorFromHex(category.color),
       colorHex: category.color,
+      iconName: category.icon ?? 'category',
     );
   }
 
@@ -212,6 +384,13 @@ class DriftCategoryRepository implements CategoryRepository {
       'health' => Icons.favorite_rounded,
       'leisure' => Icons.local_activity_rounded,
       'investment' => Icons.savings_rounded,
+      'education' => Icons.school_rounded,
+      'shopping' => Icons.shopping_bag_rounded,
+      'travel' => Icons.flight_takeoff_rounded,
+      'pets' => Icons.pets_rounded,
+      'gift' => Icons.card_giftcard_rounded,
+      'business' => Icons.work_rounded,
+      'bonus' => Icons.stars_rounded,
       _ => Icons.category_rounded,
     };
   }
@@ -221,7 +400,52 @@ class DriftCategoryRepository implements CategoryRepository {
     final parsed = int.tryParse('FF$normalized', radix: 16);
     return parsed == null ? AppColors.primary : Color(parsed);
   }
+
+  Future<void> _ensureCategoryNameIsAvailable({
+    required int userId,
+    required String type,
+    required String name,
+    int? exceptCategoryId,
+  }) async {
+    final categories = await _database.categoriesDao.findByUserAndType(
+      userId: userId,
+      type: type,
+    );
+    final normalizedName = _normalize(name);
+    final alreadyExists = categories.any(
+      (category) =>
+          category.id != exceptCategoryId &&
+          _normalize(category.name) == normalizedName,
+    );
+    if (alreadyExists) {
+      throw StateError('Já existe uma categoria com esse nome.');
+    }
+  }
+
+  Future<void> _ensureSubcategoryNameIsAvailable({
+    required int userId,
+    required int categoryId,
+    required String name,
+    int? exceptSubcategoryId,
+  }) async {
+    final subcategories =
+        await _database.categoriesDao.findSubcategoriesByCategory(
+      userId: userId,
+      categoryId: categoryId,
+    );
+    final normalizedName = _normalize(name);
+    final alreadyExists = subcategories.any(
+      (subcategory) =>
+          subcategory.id != exceptSubcategoryId &&
+          _normalize(subcategory.name) == normalizedName,
+    );
+    if (alreadyExists) {
+      throw StateError('Já existe uma subcategoria com esse nome.');
+    }
+  }
 }
+
+String _normalize(String value) => value.trim().toLowerCase();
 
 class _DefaultCategory {
   const _DefaultCategory({
