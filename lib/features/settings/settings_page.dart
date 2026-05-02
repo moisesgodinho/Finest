@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/routing/app_router.dart';
 import '../../core/auth/auth_service.dart';
+import '../../core/demo/demo_data_service.dart';
+import '../../core/routing/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_controller.dart';
 import '../../shared/widgets/section_card.dart';
@@ -155,6 +157,18 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 18),
+            if (kDebugMode) ...[
+              SectionCard(
+                title: 'Desenvolvimento',
+                child: _SettingTile(
+                  icon: Icons.restart_alt_rounded,
+                  title: 'Recriar dados mockados',
+                  subtitle: 'Limpa o SQLite e cria histórico demo',
+                  onTap: () => _confirmResetDemoData(context, ref),
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -179,6 +193,61 @@ class SettingsPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmResetDemoData(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Recriar dados mockados?'),
+          content: const Text(
+            'Isso vai apagar todos os dados locais deste app e criar uma base demo com histórico dos últimos meses.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Recriar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldReset != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Recriando dados mockados...')),
+    );
+
+    try {
+      await ref.read(demoDataServiceProvider).resetAndSeedDemoData();
+      await ref.read(authStateProvider.notifier).restoreSession();
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Dados mockados recriados.')),
+      );
+      context.go(AppRoutes.home);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Erro ao recriar dados: $error')),
+      );
+    }
   }
 
   Future<void> _showThemePicker(

@@ -31,7 +31,7 @@ class LocalAuthService implements AuthService {
   })  : _userRepository = userRepository,
         _categoryRepository = categoryRepository;
 
-  static const _sessionUserIdKey = 'finance_pet.session_user_id';
+  static const sessionUserIdKey = 'finance_pet.session_user_id';
 
   final UserRepository _userRepository;
   final CategoryRepository _categoryRepository;
@@ -39,14 +39,14 @@ class LocalAuthService implements AuthService {
   @override
   Future<AppUser?> currentUser() async {
     final preferences = await SharedPreferences.getInstance();
-    final userId = preferences.getInt(_sessionUserIdKey);
+    final userId = preferences.getInt(sessionUserIdKey);
     if (userId == null) {
       return null;
     }
 
     final user = await _userRepository.findById(userId);
     if (user == null) {
-      await preferences.remove(_sessionUserIdKey);
+      await preferences.remove(sessionUserIdKey);
     } else {
       await _categoryRepository.ensureDefaultCategories(user.id);
     }
@@ -86,12 +86,12 @@ class LocalAuthService implements AuthService {
   @override
   Future<void> signOut() async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(_sessionUserIdKey);
+    await preferences.remove(sessionUserIdKey);
   }
 
   Future<void> _saveSession(int userId) async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setInt(_sessionUserIdKey, userId);
+    await preferences.setInt(sessionUserIdKey, userId);
   }
 
   String _nameFromEmail(String email) {

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -55,6 +55,10 @@ class CardsPage extends ConsumerWidget {
             else
               _HeroCreditCard(
                 card: primaryCard,
+                onTap: () => _openCardInvoice(
+                  context,
+                  state.invoiceForCard(primaryCard),
+                ),
                 onPay: () => _confirmPayInvoice(context, ref, primaryCard),
               ),
             const SizedBox(height: 18),
@@ -400,170 +404,525 @@ class _EmptyCards extends StatelessWidget {
 class _HeroCreditCard extends StatelessWidget {
   const _HeroCreditCard({
     required this.card,
+    required this.onTap,
     required this.onPay,
   });
 
   final CreditCardPreview card;
+  final VoidCallback onTap;
   final VoidCallback onPay;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primaryDark, card.color],
+    return Column(
+      children: [
+        _PhysicalCreditCard(
+          card: card,
+          onTap: onTap,
+          isHero: true,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.white.withValues(alpha: 0.16),
-                          child: Text(
-                            _initials(card.name),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            '${card.name} •••• ${card.lastDigits}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${card.brandLabel} • Fecha dia ${card.closingDay}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white70,
-                          ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Fatura atual',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white70,
-                          ),
-                    ),
-                    Text(
-                      CurrencyUtils.formatCents(card.invoiceCents),
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
-                              ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Vencimento dia ${card.dueDay}',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.white,
-                          ),
-                    ),
-                  ],
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final colors = context.colors;
+            final paymentLabel = Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: colors.textSecondary,
+                  size: 18,
                 ),
-              ),
-              const SizedBox(width: 16),
-              SizedBox(
-                height: 92,
-                width: 92,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CircularProgressIndicator(
-                      value: card.usedPercent,
-                      strokeWidth: 10,
-                      backgroundColor: Colors.white24,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF8EE6A4),
-                      ),
-                    ),
-                    Center(
-                      child: Text(
-                        '${(card.usedPercent * 100).round()}%',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(color: Colors.white),
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Pagamento: ${card.defaultPaymentAccountName ?? 'conta padrão'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final paymentLabel = Text(
-                'Pagamento: ${card.defaultPaymentAccountName ?? 'conta padrão'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
-                    ),
-              );
-              final payButton = FilledButton.tonalIcon(
-                onPressed: card.invoiceCents > 0 ? onPay : null,
-                icon: const Icon(Icons.check_circle_rounded),
-                label: const Text('Pagar'),
-              );
+              ],
+            );
+            final payButton = FilledButton.icon(
+              onPressed: card.invoiceCents > 0 ? onPay : null,
+              icon: const Icon(Icons.check_circle_rounded),
+              label: const Text('Pagar fatura'),
+            );
 
-              if (constraints.maxWidth < 300) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    paymentLabel,
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: payButton,
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
+            if (constraints.maxWidth < 340) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: paymentLabel),
-                  const SizedBox(width: 12),
-                  Flexible(child: payButton),
+                  paymentLabel,
+                  const SizedBox(height: 12),
+                  payButton,
                 ],
               );
-            },
+            }
+
+            return Row(
+              children: [
+                Expanded(child: paymentLabel),
+                const SizedBox(width: 12),
+                payButton,
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PhysicalCreditCard extends StatelessWidget {
+  const _PhysicalCreditCard({
+    required this.card,
+    required this.onTap,
+    this.menu,
+    this.isHero = false,
+  });
+
+  final CreditCardPreview card;
+  final VoidCallback onTap;
+  final Widget? menu;
+  final bool isHero;
+
+  int get _availableLimitCents {
+    return (card.limitCents - card.invoiceCents).clamp(0, 1 << 31).toInt();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = card.color;
+    final gradientStart = _shiftColor(baseColor, lightnessDelta: 0.12);
+    final gradientEnd = _shiftColor(baseColor, lightnessDelta: -0.18);
+
+    return AspectRatio(
+      aspectRatio: 315 / 184,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(isHero ? 28 : 24),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(isHero ? 28 : 24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [gradientStart, gradientEnd],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: baseColor.withValues(alpha: 0.28),
+                  blurRadius: isHero ? 26 : 18,
+                  offset: Offset(0, isHero ? 14 : 9),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(isHero ? 28 : 24),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: -78,
+                    bottom: -92,
+                    child: _CardGlow(
+                      size: isHero ? 245 : 210,
+                      opacity: 0.11,
+                    ),
+                  ),
+                  Positioned(
+                    right: -92,
+                    top: -96,
+                    child: _CardGlow(
+                      size: isHero ? 230 : 198,
+                      opacity: 0.10,
+                    ),
+                  ),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final padding = isHero ? 22.0 : 18.0;
+                      final amountTop = constraints.maxHeight * 0.46;
+                      final footerBottom = isHero ? 20.0 : 16.0;
+
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: padding,
+                            right: padding,
+                            top: padding,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        card.bankName?.isNotEmpty == true
+                                            ? card.bankName!
+                                            : card.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              card.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleLarge
+                                                  ?.copyWith(
+                                                    color: Colors.white,
+                                                    fontSize: isHero ? 23 : 19,
+                                                  ),
+                                            ),
+                                          ),
+                                          if (card.isPrimary) ...[
+                                            const SizedBox(width: 8),
+                                            const _CardPrimaryDot(),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '${card.brandLabel} • Fecha ${card.closingDay} • Vence ${card.dueDay}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                _CardBrandMark(
+                                  brand: card.brand,
+                                  label: card.brandLabel,
+                                ),
+                                if (menu != null) ...[
+                                  const SizedBox(width: 2),
+                                  menu!,
+                                ],
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: padding,
+                            right: padding,
+                            top: amountTop,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Limite atual',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        CurrencyUtils.formatCents(
+                                          card.limitCents,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineSmall
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontSize: isHero ? 29 : 23,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const _CardChip(),
+                                const SizedBox(width: 10),
+                                Icon(
+                                  Icons.contactless_rounded,
+                                  color: Colors.white.withValues(alpha: 0.88),
+                                  size: isHero ? 28 : 24,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: padding,
+                            right: padding,
+                            bottom: footerBottom,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _CardFooterDatum(
+                                    label: 'Disponível',
+                                    value: CurrencyUtils.formatCents(
+                                      _availableLimitCents,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                _CardFooterDatum(
+                                  label: 'Fatura',
+                                  value: CurrencyUtils.formatCents(
+                                    card.invoiceCents,
+                                  ),
+                                  alignEnd: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CardGlow extends StatelessWidget {
+  const _CardGlow({
+    required this.size,
+    required this.opacity,
+  });
+
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size * 0.72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: opacity),
+      ),
+    );
+  }
+}
+
+class _CardChip extends StatelessWidget {
+  const _CardChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 30,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8E0CA),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 13,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 1, color: Colors.black12),
+          ),
+          Positioned(
+            right: 13,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 1, color: Colors.black12),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 10,
+            child: Container(height: 1, color: Colors.black12),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: Container(height: 1, color: Colors.black12),
           ),
         ],
       ),
     );
   }
+}
+
+class _CardBrandMark extends StatelessWidget {
+  const _CardBrandMark({
+    required this.brand,
+    required this.label,
+  });
+
+  final String brand;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (brand == 'mastercard') {
+      return const SizedBox(
+        width: 48,
+        height: 32,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 4,
+              top: 4,
+              child: _BrandCircle(color: Color(0xFFEB001B)),
+            ),
+            Positioned(
+              right: 4,
+              top: 4,
+              child: _BrandCircle(color: Color(0xFFF79E1B)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final display = switch (brand) {
+      'visa' => 'VISA',
+      'elo' => 'elo',
+      'amex' => 'AMEX',
+      'hipercard' => 'HIPER',
+      _ => label,
+    };
+
+    return Text(
+      display,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+    );
+  }
+}
+
+class _BrandCircle extends StatelessWidget {
+  const _BrandCircle({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 25,
+      height: 25,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.92),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+class _CardFooterDatum extends StatelessWidget {
+  const _CardFooterDatum({
+    required this.label,
+    required this.value,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white60,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CardPrimaryDot extends StatelessWidget {
+  const _CardPrimaryDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Cartão principal',
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: const BoxDecoration(
+          color: Color(0xFF8EE6A4),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+Color _shiftColor(Color color, {required double lightnessDelta}) {
+  final hsl = HSLColor.fromColor(color);
+  return hsl
+      .withLightness(
+        (hsl.lightness + lightnessDelta).clamp(0.18, 0.72).toDouble(),
+      )
+      .toColor();
 }
 
 class _CardsMetric extends StatelessWidget {
@@ -662,140 +1021,40 @@ class _CreditCardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: card.color,
-                  child: Text(
-                    _initials(card.name),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${card.name} •••• ${card.lastDigits}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          ),
-                          if (card.isPrimary) const SizedBox(width: 6),
-                          if (card.isPrimary)
-                            const _PrimaryBadge(label: 'Principal'),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${card.brandLabel} • Vence dia ${card.dueDay}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<_CardAction>(
-                  onSelected: (action) {
-                    switch (action) {
-                      case _CardAction.edit:
-                        onEdit();
-                      case _CardAction.pay:
-                        onPay();
-                      case _CardAction.delete:
-                        onDelete();
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return [
-                      const PopupMenuItem(
-                        value: _CardAction.edit,
-                        child: Text('Editar'),
-                      ),
-                      const PopupMenuItem(
-                        value: _CardAction.pay,
-                        child: Text('Pagar fatura'),
-                      ),
-                      const PopupMenuItem(
-                        value: _CardAction.delete,
-                        child: Text('Remover'),
-                      ),
-                    ];
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: card.usedPercent,
-                minHeight: 7,
-                backgroundColor: colors.border,
-                valueColor: AlwaysStoppedAnimation<Color>(card.color),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: _PhysicalCreditCard(
+        card: card,
+        onTap: onTap,
+        menu: PopupMenuButton<_CardAction>(
+          tooltip: 'Ações do cartão',
+          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+          onSelected: (action) {
+            switch (action) {
+              case _CardAction.edit:
+                onEdit();
+              case _CardAction.pay:
+                onPay();
+              case _CardAction.delete:
+                onDelete();
+            }
+          },
+          itemBuilder: (context) {
+            return [
+              const PopupMenuItem(
+                value: _CardAction.edit,
+                child: Text('Editar'),
               ),
-            ),
-            const SizedBox(height: 7),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Utilizado ${CurrencyUtils.formatCents(card.invoiceCents)} de ${CurrencyUtils.formatCents(card.limitCents)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  CurrencyUtils.formatCents(card.invoiceCents),
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(width: 8),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: card.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    child: Text(
-                      '${(card.usedPercent * 100).round()}%',
-                      style: TextStyle(
-                        color: card.color,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              const PopupMenuItem(
+                value: _CardAction.pay,
+                child: Text('Pagar fatura'),
+              ),
+              const PopupMenuItem(
+                value: _CardAction.delete,
+                child: Text('Remover'),
+              ),
+            ];
+          },
         ),
       ),
     );
@@ -803,34 +1062,6 @@ class _CreditCardTile extends StatelessWidget {
 }
 
 enum _CardAction { edit, pay, delete }
-
-class _PrimaryBadge extends StatelessWidget {
-  const _PrimaryBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.accentSoft,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-      ),
-    );
-  }
-}
 
 class _CreditCardFormSheet extends StatefulWidget {
   const _CreditCardFormSheet({
@@ -1287,12 +1518,4 @@ class _ColorOption extends StatelessWidget {
       ),
     );
   }
-}
-
-String _initials(String name) {
-  final trimmedName = name.trim();
-  if (trimmedName.isEmpty) {
-    return '?';
-  }
-  return trimmedName.characters.take(2).toString().toUpperCase();
 }
