@@ -64,7 +64,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _openCreateActionMenu() async {
     final action = await showModalBottomSheet<_CreateAction>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -137,7 +137,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -156,7 +156,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -175,7 +175,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -194,7 +194,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -252,6 +252,7 @@ class _HomeDashboard extends ConsumerWidget {
     final petState = ref.watch(petViewModelProvider);
     final viewModel = ref.read(homeViewModelProvider.notifier);
     final firstName = state.userName.split(' ').first;
+    final colors = context.colors;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -273,7 +274,7 @@ class _HomeDashboard extends ConsumerWidget {
                       Text(
                         state.monthLabel,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: AppColors.textSecondary,
+                              color: colors.textSecondary,
                             ),
                       ),
                     ],
@@ -289,7 +290,7 @@ class _HomeDashboard extends ConsumerWidget {
             BalanceCard(
               title: 'Saldo atual',
               value: CurrencyUtils.formatCents(state.currentBalanceCents),
-              subtitle: '↑ 12,6% vs. mês anterior',
+              subtitle: state.balanceVariationLabel,
               isVisible: state.isBalanceVisible,
               onToggleVisibility: viewModel.toggleBalanceVisibility,
             ),
@@ -352,6 +353,7 @@ class _FinancePetHomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final streakLabel = state.contributionStreakMonths == 1
         ? '1 mês seguido'
         : '${state.contributionStreakMonths} meses seguidos';
@@ -364,11 +366,12 @@ class _FinancePetHomeCard extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: colors.surface,
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: colors.shadow
+                    .withValues(alpha: colors.isDark ? 0.36 : 0.06),
                 blurRadius: 22,
                 offset: const Offset(0, 10),
               ),
@@ -402,7 +405,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.10),
+                            color: colors.primary.withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
@@ -411,7 +414,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(
-                                  color: AppColors.primary,
+                                  color: colors.primary,
                                   fontWeight: FontWeight.w900,
                                 ),
                           ),
@@ -424,7 +427,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                           ),
                     ),
                     const SizedBox(height: 12),
@@ -433,9 +436,9 @@ class _FinancePetHomeCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: state.progressToNextLevel,
                         minHeight: 9,
-                        backgroundColor: AppColors.border,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.primaryLight,
+                        backgroundColor: colors.border,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          colors.primaryLight,
                         ),
                       ),
                     ),
@@ -451,7 +454,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                                 .textTheme
                                 .bodyMedium
                                 ?.copyWith(
-                                  color: AppColors.primary,
+                                  color: colors.primary,
                                   fontWeight: FontWeight.w800,
                                 ),
                           ),
@@ -462,7 +465,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: colors.textSecondary,
                                   ),
                         ),
                       ],
@@ -471,9 +474,9 @@ class _FinancePetHomeCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
-                color: AppColors.textSecondary,
+                color: colors.textSecondary,
               ),
             ],
           ),
@@ -534,15 +537,17 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       constraints: const BoxConstraints(minHeight: 126),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -585,6 +590,8 @@ class _MonthlySummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return SectionCard(
       title: 'Resumo do mês',
       trailing: const _SectionAction(label: 'Detalhes'),
@@ -595,43 +602,44 @@ class _MonthlySummaryCard extends StatelessWidget {
             label: 'Receitas',
             value: CurrencyUtils.formatCents(state.incomeCents),
             color: AppColors.success,
-            percent: 0.78,
+            percent: state.incomeProgressPercent,
           ),
           const SizedBox(height: 12),
           _AmountLine(
             label: 'Despesas',
             value: CurrencyUtils.formatCents(state.expenseCents),
             color: AppColors.danger,
-            percent: 0.49,
+            percent: state.expenseProgressPercent,
           ),
           if (state.pendingIncomeCents > 0 ||
-              state.pendingExpenseCents > 0) ...[
+              state.totalPendingOutflowCents > 0) ...[
             const SizedBox(height: 16),
             _PendingSummary(
               pendingIncomeCents: state.pendingIncomeCents,
               pendingExpenseCents: state.pendingExpenseCents,
+              creditCardInvoiceCents: state.creditCardInvoiceCents,
             ),
           ],
           const SizedBox(height: 16),
           DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.mint,
+              color: colors.accentSoft,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.account_balance_wallet_rounded,
-                    color: AppColors.primary,
+                    color: colors.primary,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Você possui ${(state.availableBudgetPercent * 100).round()}% do orçamento disponível',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textPrimary,
+                            color: colors.textPrimary,
                           ),
                     ),
                   ),
@@ -660,6 +668,8 @@ class _AmountLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -680,7 +690,7 @@ class _AmountLine extends StatelessWidget {
           child: LinearProgressIndicator(
             value: percent,
             minHeight: 8,
-            backgroundColor: AppColors.border,
+            backgroundColor: colors.border,
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
@@ -693,16 +703,20 @@ class _PendingSummary extends StatelessWidget {
   const _PendingSummary({
     required this.pendingIncomeCents,
     required this.pendingExpenseCents,
+    required this.creditCardInvoiceCents,
   });
 
   final int pendingIncomeCents;
   final int pendingExpenseCents;
+  final int creditCardInvoiceCents;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.10),
+        color: colors.warning.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
@@ -716,7 +730,8 @@ class _PendingSummary extends StatelessWidget {
                 value: CurrencyUtils.formatCents(pendingIncomeCents),
                 color: AppColors.success,
               ),
-            if (pendingIncomeCents > 0 && pendingExpenseCents > 0)
+            if (pendingIncomeCents > 0 &&
+                (pendingExpenseCents > 0 || creditCardInvoiceCents > 0))
               const SizedBox(height: 10),
             if (pendingExpenseCents > 0)
               _PendingLine(
@@ -724,6 +739,15 @@ class _PendingSummary extends StatelessWidget {
                 label: 'A pagar',
                 value: CurrencyUtils.formatCents(pendingExpenseCents),
                 color: AppColors.danger,
+              ),
+            if (pendingExpenseCents > 0 && creditCardInvoiceCents > 0)
+              const SizedBox(height: 10),
+            if (creditCardInvoiceCents > 0)
+              _PendingLine(
+                icon: Icons.credit_card_rounded,
+                label: 'Faturas em aberto',
+                value: CurrencyUtils.formatCents(creditCardInvoiceCents),
+                color: AppColors.info,
               ),
           ],
         ),
@@ -776,6 +800,34 @@ class _CreditCardSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    if (card.id == 0) {
+      return SectionCard(
+        title: 'CartÃ£o',
+        trailing: const _SectionAction(label: 'Ver'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: colors.accentSoft,
+                foregroundColor: colors.primary,
+                child: const Icon(Icons.credit_card_off_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Cadastre um cartÃ£o para acompanhar fatura e limite.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SectionCard(
       title: 'Cartão',
       trailing: const _SectionAction(label: 'Ver'),
@@ -783,7 +835,7 @@ class _CreditCardSummary extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.primaryDark,
+          color: colors.primaryDark,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -836,8 +888,8 @@ class _CreditCardSummary extends StatelessWidget {
                 value: card.usedPercent,
                 minHeight: 8,
                 backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.primaryLight,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  colors.primaryLight,
                 ),
               ),
             ),
@@ -865,12 +917,47 @@ class _CategoriesCard extends StatelessWidget {
     return SectionCard(
       title: 'Gastos por categoria',
       trailing: const _SectionAction(label: 'Relatório'),
+      child: categories.isEmpty
+          ? const _EmptySectionMessage(
+              icon: Icons.pie_chart_outline_rounded,
+              message: 'Os gastos por categoria aparecem apÃ³s lanÃ§amentos.',
+            )
+          : Column(
+              children: [
+                for (final category in categories) ...[
+                  _CategoryRow(category: category),
+                  if (category != categories.last) const SizedBox(height: 12),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _EmptySectionMessage extends StatelessWidget {
+  const _EmptySectionMessage({
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
       child: Column(
         children: [
-          for (final category in categories) ...[
-            _CategoryRow(category: category),
-            if (category != categories.last) const SizedBox(height: 12),
-          ],
+          Icon(icon, color: colors.textSecondary, size: 38),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ],
       ),
     );
@@ -884,6 +971,8 @@ class _CategoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Row(
       children: [
         CircleAvatar(
@@ -913,7 +1002,7 @@ class _CategoryRow extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: category.percent,
                   minHeight: 7,
-                  backgroundColor: AppColors.border,
+                  backgroundColor: colors.border,
                   valueColor: AlwaysStoppedAnimation<Color>(category.color),
                 ),
               ),
@@ -947,12 +1036,17 @@ class _RecentTransactionsCard extends StatelessWidget {
     return SectionCard(
       title: 'Últimos lançamentos',
       trailing: const _SectionAction(label: 'Ver todos'),
-      child: Column(
-        children: [
-          for (final transaction in transactions)
-            _TransactionTile(transaction: transaction),
-        ],
-      ),
+      child: transactions.isEmpty
+          ? const _EmptySectionMessage(
+              icon: Icons.receipt_long_outlined,
+              message: 'Seus lanÃ§amentos recentes aparecerÃ£o aqui.',
+            )
+          : Column(
+              children: [
+                for (final transaction in transactions)
+                  _TransactionTile(transaction: transaction),
+              ],
+            ),
     );
   }
 }
@@ -964,11 +1058,12 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final color = !transaction.isPaid
         ? AppColors.warning
         : transaction.isIncome
             ? AppColors.success
-            : AppColors.textPrimary;
+            : colors.textPrimary;
     final prefix = transaction.isIncome ? '+ ' : '- ';
 
     return Padding(
@@ -1072,6 +1167,8 @@ class _QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -1098,7 +1195,7 @@ class _QuickActionButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
+                      color: colors.textPrimary,
                     ),
               ),
             ),
@@ -1116,6 +1213,8 @@ class _SectionAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1123,7 +1222,7 @@ class _SectionAction extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+        Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
       ],
     );
   }

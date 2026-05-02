@@ -133,7 +133,7 @@ class AccountsPage extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -244,6 +244,7 @@ class _EmergencyReserveCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasSuggestion = state.hasEmergencyReserveSuggestion;
     final reserveAccount = state.emergencyReserveAccount;
+    final colors = context.colors;
 
     if (reserveAccount != null) {
       final targetCents = state.emergencyReserveTargetCents;
@@ -266,7 +267,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 25,
                   backgroundColor: reserveAccount.color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: colors.onPrimary,
                   child: const Icon(Icons.shield_rounded),
                 ),
                 const SizedBox(width: 14),
@@ -321,9 +322,9 @@ class _EmergencyReserveCard extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: state.emergencyReserveProgress,
                   minHeight: 10,
-                  backgroundColor: AppColors.border,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primaryLight,
+                  backgroundColor: colors.border,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    colors.primaryLight,
                   ),
                 ),
               ),
@@ -333,7 +334,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                     ? 'Meta alcançada.'
                     : 'Faltam ${CurrencyUtils.formatCents(remainingCents)} para completar a reserva.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
               ),
             ],
@@ -352,8 +353,8 @@ class _EmergencyReserveCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.10),
-                foregroundColor: AppColors.primary,
+                backgroundColor: colors.primary.withValues(alpha: 0.10),
+                foregroundColor: colors.primary,
                 child: const Icon(Icons.shield_rounded),
               ),
               const SizedBox(width: 14),
@@ -363,7 +364,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                       ? 'Uma reserva protege seu mês quando aparece um imprevisto. Pela sua média recente, esta é uma boa meta inicial.'
                       : 'Comece separando uma conta para sua reserva. Quando houver mais despesas registradas, o app calcula uma meta automática.',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: colors.textSecondary,
                       ),
                 ),
               ),
@@ -374,7 +375,7 @@ class _EmergencyReserveCard extends StatelessWidget {
             Text(
               'Meta sugerida',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                   ),
             ),
             const SizedBox(height: 4),
@@ -383,7 +384,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                 state.suggestedEmergencyReserveCents,
               ),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: AppColors.primary,
+                    color: colors.primary,
                   ),
             ),
             const SizedBox(height: 6),
@@ -394,16 +395,16 @@ class _EmergencyReserveCard extends StatelessWidget {
           ] else ...[
             DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.mint,
+                color: colors.accentSoft,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.lightbulb_outline_rounded,
-                      color: AppColors.primary,
+                      color: colors.primary,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -432,7 +433,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                     state.emergencyReserveBalanceCents,
                   ),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.primary,
+                        color: colors.primary,
                         fontWeight: FontWeight.w800,
                       ),
                 ),
@@ -444,9 +445,9 @@ class _EmergencyReserveCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: state.emergencyReserveProgress,
                 minHeight: 9,
-                backgroundColor: AppColors.border,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.primaryLight,
+                backgroundColor: colors.border,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  colors.primaryLight,
                 ),
               ),
             ),
@@ -477,9 +478,11 @@ class _ReserveDataBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.mint,
+        color: colors.accentSoft,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
@@ -492,7 +495,7 @@ class _ReserveDataBlock extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                   ),
             ),
             const SizedBox(height: 4),
@@ -501,7 +504,7 @@ class _ReserveDataBlock extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.primary,
+                    color: colors.primary,
                   ),
             ),
           ],
@@ -516,13 +519,15 @@ class _EmptyAccounts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.account_balance_wallet_outlined,
-            color: AppColors.textSecondary,
+            color: colors.textSecondary,
             size: 44,
           ),
           const SizedBox(height: 10),
@@ -554,6 +559,7 @@ class _AccountTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final trimmedName = account.name.trim();
     final initials = trimmedName.isEmpty
         ? '?'
@@ -602,9 +608,9 @@ class _AccountTile extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.textSecondary,
+              color: colors.textSecondary,
             ),
           ],
         ),
@@ -624,6 +630,7 @@ class _DistributionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final percent = totalCents == 0 ? 0.0 : account.balanceCents / totalCents;
 
     return Padding(
@@ -657,7 +664,7 @@ class _DistributionRow extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: percent,
                 minHeight: 7,
-                backgroundColor: AppColors.border,
+                backgroundColor: colors.border,
                 valueColor: AlwaysStoppedAnimation<Color>(account.color),
               ),
             ),
@@ -771,6 +778,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
   Widget build(BuildContext context) {
     final account = widget.account;
     final isEmergencyReserve = widget.isEmergencyReserve;
+    final colors = context.colors;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -802,16 +810,16 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                 const SizedBox(height: 14),
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.mint,
+                    color: colors.accentSoft,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.shield_rounded,
-                          color: AppColors.primary,
+                          color: colors.primary,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -1059,6 +1067,7 @@ class _ColorOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final parsedColor = Color(
       int.parse('FF${color.replaceFirst('#', '')}', radix: 16),
     );
@@ -1073,7 +1082,7 @@ class _ColorOption extends StatelessWidget {
           shape: BoxShape.circle,
           color: parsedColor,
           border: Border.all(
-            color: isSelected ? AppColors.textPrimary : Colors.transparent,
+            color: isSelected ? colors.textPrimary : Colors.transparent,
             width: 3,
           ),
         ),

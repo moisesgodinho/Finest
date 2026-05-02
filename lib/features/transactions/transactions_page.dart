@@ -136,7 +136,7 @@ class TransactionsPage extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -280,11 +280,13 @@ class _CenteredMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 26),
       child: Column(
         children: [
-          Icon(icon, color: AppColors.textSecondary, size: 46),
+          Icon(icon, color: colors.textSecondary, size: 46),
           const SizedBox(height: 12),
           Text(
             title,
@@ -316,11 +318,12 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final amountColor = !transaction.isPaid
         ? AppColors.warning
         : transaction.isIncome
             ? AppColors.success
-            : AppColors.textPrimary;
+            : colors.textPrimary;
     final amountPrefix = transaction.isIncome ? '+ ' : '- ';
 
     return Padding(

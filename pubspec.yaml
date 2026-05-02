@@ -15,6 +15,7 @@ dependencies:
   font_awesome_flutter: ^10.8.0
   go_router: ^14.8.1
   intl: ^0.20.2
+  model_viewer_plus: ^1.9.3
   path: ^1.9.1
   path_provider: ^2.1.5
   shared_preferences: ^2.5.2
@@ -29,6 +30,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/tamago.glb
   fonts:
     - family: Inter
       fonts:

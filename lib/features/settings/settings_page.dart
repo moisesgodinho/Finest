@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/theme_controller.dart';
 import '../../shared/widgets/section_card.dart';
 import 'settings_view_model.dart';
 
@@ -14,6 +15,7 @@ class SettingsPage extends ConsumerWidget {
     final settings = ref.watch(settingsViewModelProvider);
     final viewModel = ref.read(settingsViewModelProvider.notifier);
     final user = ref.watch(authStateProvider).user;
+    final themePreference = ref.watch(themeControllerProvider);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -104,10 +106,13 @@ class SettingsPage extends ConsumerWidget {
                     title: 'Categorias personalizadas',
                     subtitle: 'Editar categorias do app',
                   ),
-                  const _SettingTile(
+                  _SettingTile(
                     icon: Icons.palette_outlined,
                     title: 'Tema',
-                    subtitle: 'Claro',
+                    subtitle: themePreference.label,
+                    onTap: () {
+                      _showThemePicker(context, ref, themePreference);
+                    },
                   ),
                   const _SettingTile(
                     icon: Icons.attach_money_rounded,
@@ -171,6 +176,32 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _showThemePicker(
+    BuildContext context,
+    WidgetRef ref,
+    AppThemePreference currentPreference,
+  ) async {
+    final colors = context.colors;
+    final selectedPreference = await showModalBottomSheet<AppThemePreference>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return _ThemePickerSheet(currentPreference: currentPreference);
+      },
+    );
+
+    if (selectedPreference != null) {
+      await ref
+          .read(themeControllerProvider.notifier)
+          .setPreference(selectedPreference);
+    }
+  }
 }
 
 class _ProfileCard extends StatelessWidget {
@@ -184,19 +215,21 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primaryDark,
+        color: colors.primaryDark,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 34,
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.textSecondary,
-            child: Icon(Icons.person_rounded, size: 42),
+            backgroundColor: colors.surface,
+            foregroundColor: colors.textSecondary,
+            child: const Icon(Icons.person_rounded, size: 42),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -223,7 +256,7 @@ class _ProfileCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withValues(alpha: 0.20),
+                    color: colors.primaryLight.withValues(alpha: 0.20),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Padding(
@@ -262,15 +295,17 @@ class _SettingsShortcut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       width: 166,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -279,8 +314,8 @@ class _SettingsShortcut extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: AppColors.mint,
-            foregroundColor: AppColors.primary,
+            backgroundColor: colors.accentSoft,
+            foregroundColor: colors.primary,
             child: Icon(icon),
           ),
           const SizedBox(width: 12),
@@ -326,13 +361,15 @@ class _SwitchSettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return _SettingTileShell(
       icon: icon,
       title: title,
       subtitle: subtitle,
       trailing: Switch(
         value: value,
-        activeThumbColor: AppColors.primary,
+        activeThumbColor: colors.primary,
         onChanged: onChanged,
       ),
     );
@@ -344,21 +381,26 @@ class _SettingTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return _SettingTileShell(
       icon: icon,
       title: title,
       subtitle: subtitle,
-      trailing: const Icon(
+      onTap: onTap,
+      trailing: Icon(
         Icons.chevron_right_rounded,
-        color: AppColors.textSecondary,
+        color: colors.textSecondary,
       ),
     );
   }
@@ -370,41 +412,145 @@ class _SettingTileShell extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.trailing,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final Widget trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: colors.accentSoft,
+              foregroundColor: colors.primary,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemePickerSheet extends StatelessWidget {
+  const _ThemePickerSheet({
+    required this.currentPreference,
+  });
+
+  final AppThemePreference currentPreference;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: AppColors.mint,
-            foregroundColor: AppColors.primary,
-            child: Icon(icon),
+          Text('Tema', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            'Escolha como o FinancePet deve aparecer neste aparelho.',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.bodyLarge),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+          const SizedBox(height: 14),
+          for (final preference in AppThemePreference.values)
+            _ThemeOptionTile(
+              preference: preference,
+              isSelected: preference == currentPreference,
+            ),
+          SizedBox(height: MediaQuery.paddingOf(context).bottom),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeOptionTile extends StatelessWidget {
+  const _ThemeOptionTile({
+    required this.preference,
+    required this.isSelected,
+  });
+
+  final AppThemePreference preference;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(preference),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isSelected ? colors.accentSoft : colors.surfaceElevated,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSelected ? colors.primary : colors.border,
             ),
           ),
-          trailing,
-        ],
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor:
+                    isSelected ? colors.primary : colors.accentSoft,
+                foregroundColor: isSelected ? colors.onPrimary : colors.primary,
+                child: Icon(preference.icon),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      preference.label,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      preference.description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check_circle_rounded, color: colors.primary),
+            ],
+          ),
+        ),
       ),
     );
   }

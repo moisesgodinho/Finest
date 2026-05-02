@@ -553,17 +553,19 @@ class _SubcategoryField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     if (subcategories.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.mint,
+          color: colors.accentSoft,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
-            const Icon(Icons.label_outline_rounded, color: AppColors.primary),
+            Icon(Icons.label_outline_rounded, color: colors.primary),
             const SizedBox(width: 10),
             const Expanded(
               child: Text('Nenhuma subcategoria para esta categoria.'),
@@ -633,10 +635,10 @@ class _MissingRequirement extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
             size: 44,
-            color: AppColors.textSecondary,
+            color: context.colors.textSecondary,
           ),
           const SizedBox(height: 10),
           Text(

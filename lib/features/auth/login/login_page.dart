@@ -53,16 +53,18 @@ class _LoginHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       height: 360,
       width: double.infinity,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.primaryDark,
-            AppColors.primary,
+            colors.primaryDark,
+            colors.primary,
           ],
         ),
       ),
@@ -135,13 +137,15 @@ class _LoginCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.44 : 0.08),
             blurRadius: 26,
             offset: const Offset(0, 16),
           ),
@@ -224,7 +228,10 @@ class _LoginCard extends StatelessWidget {
             const SizedBox(height: 12),
             _SocialButton(
               label: 'Continuar com Apple',
-              icon: const FaIcon(FontAwesomeIcons.apple, color: Colors.black),
+              icon: FaIcon(
+                FontAwesomeIcons.apple,
+                color: colors.textPrimary,
+              ),
               onPressed: () => onSocialLogin(SocialAuthProvider.apple),
             ),
             const SizedBox(height: 12),
@@ -271,14 +278,16 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return SizedBox(
       width: double.infinity,
       height: 54,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
-          side: const BorderSide(color: AppColors.border),
+          foregroundColor: colors.textPrimary,
+          side: BorderSide(color: colors.border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),

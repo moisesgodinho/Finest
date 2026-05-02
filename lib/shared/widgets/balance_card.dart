@@ -20,23 +20,26 @@ class BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(minHeight: 186),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.primaryDark,
-            AppColors.primary,
+            colors.primaryDark,
+            colors.primary,
           ],
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.20),
+            color: colors.primaryDark
+                .withValues(alpha: colors.isDark ? 0.34 : 0.20),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -91,7 +94,7 @@ class BalanceCard extends StatelessWidget {
                   const SizedBox(height: 14),
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AppColors.primaryLight.withValues(alpha: 0.20),
+                      color: colors.primaryLight.withValues(alpha: 0.20),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Padding(

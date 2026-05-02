@@ -168,7 +168,7 @@ class CardsPage extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -363,15 +363,17 @@ class _EmptyCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return SectionCard(
       title: 'Cartões',
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           children: [
-            const Icon(
+            Icon(
               Icons.credit_card_off_rounded,
-              color: AppColors.textSecondary,
+              color: colors.textSecondary,
               size: 44,
             ),
             const SizedBox(height: 10),
@@ -519,25 +521,44 @@ class _HeroCreditCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Pagamento: ${card.defaultPaymentAccountName ?? 'conta padrão'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white70,
-                      ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.tonalIcon(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final paymentLabel = Text(
+                'Pagamento: ${card.defaultPaymentAccountName ?? 'conta padrão'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white70,
+                    ),
+              );
+              final payButton = FilledButton.tonalIcon(
                 onPressed: card.invoiceCents > 0 ? onPay : null,
                 icon: const Icon(Icons.check_circle_rounded),
                 label: const Text('Pagar'),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    paymentLabel,
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: payButton,
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: paymentLabel),
+                  const SizedBox(width: 12),
+                  Flexible(child: payButton),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -558,15 +579,17 @@ class _CardsMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       width: 162,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -575,8 +598,8 @@ class _CardsMetric extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: AppColors.mint,
-            foregroundColor: AppColors.primary,
+            backgroundColor: colors.accentSoft,
+            foregroundColor: colors.primary,
             child: Icon(icon),
           ),
           const SizedBox(width: 10),
@@ -639,82 +662,118 @@ class _CreditCardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 25,
-              backgroundColor: card.color,
-              child: Text(
-                _initials(card.name),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${card.name} •••• ${card.lastDigits}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      ),
-                      if (card.isPrimary) const SizedBox(width: 6),
-                      if (card.isPrimary)
-                        const _PrimaryBadge(label: 'Principal'),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${card.brandLabel} • Vence dia ${card.dueDay}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: card.usedPercent,
-                      minHeight: 7,
-                      backgroundColor: AppColors.border,
-                      valueColor: AlwaysStoppedAnimation<Color>(card.color),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 25,
+                  backgroundColor: card.color,
+                  child: Text(
+                    _initials(card.name),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  Text(
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${card.name} •••• ${card.lastDigits}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                          ),
+                          if (card.isPrimary) const SizedBox(width: 6),
+                          if (card.isPrimary)
+                            const _PrimaryBadge(label: 'Principal'),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${card.brandLabel} • Vence dia ${card.dueDay}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<_CardAction>(
+                  onSelected: (action) {
+                    switch (action) {
+                      case _CardAction.edit:
+                        onEdit();
+                      case _CardAction.pay:
+                        onPay();
+                      case _CardAction.delete:
+                        onDelete();
+                    }
+                  },
+                  itemBuilder: (context) {
+                    return [
+                      const PopupMenuItem(
+                        value: _CardAction.edit,
+                        child: Text('Editar'),
+                      ),
+                      const PopupMenuItem(
+                        value: _CardAction.pay,
+                        child: Text('Pagar fatura'),
+                      ),
+                      const PopupMenuItem(
+                        value: _CardAction.delete,
+                        child: Text('Remover'),
+                      ),
+                    ];
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: card.usedPercent,
+                minHeight: 7,
+                backgroundColor: colors.border,
+                valueColor: AlwaysStoppedAnimation<Color>(card.color),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
                     'Utilizado ${CurrencyUtils.formatCents(card.invoiceCents)} de ${CurrencyUtils.formatCents(card.limitCents)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
+                ),
+                const SizedBox(width: 8),
                 Text(
                   CurrencyUtils.formatCents(card.invoiceCents),
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(width: 8),
                 DecoratedBox(
                   decoration: BoxDecoration(
                     color: card.color.withValues(alpha: 0.12),
@@ -736,34 +795,6 @@ class _CreditCardTile extends StatelessWidget {
                 ),
               ],
             ),
-            PopupMenuButton<_CardAction>(
-              onSelected: (action) {
-                switch (action) {
-                  case _CardAction.edit:
-                    onEdit();
-                  case _CardAction.pay:
-                    onPay();
-                  case _CardAction.delete:
-                    onDelete();
-                }
-              },
-              itemBuilder: (context) {
-                return [
-                  const PopupMenuItem(
-                    value: _CardAction.edit,
-                    child: Text('Editar'),
-                  ),
-                  const PopupMenuItem(
-                    value: _CardAction.pay,
-                    child: Text('Pagar fatura'),
-                  ),
-                  const PopupMenuItem(
-                    value: _CardAction.delete,
-                    child: Text('Remover'),
-                  ),
-                ];
-              },
-            ),
           ],
         ),
       ),
@@ -780,9 +811,11 @@ class _PrimaryBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.mint,
+        color: colors.accentSoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
@@ -790,7 +823,7 @@ class _PrimaryBadge extends StatelessWidget {
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.primary,
+                color: colors.primary,
                 fontWeight: FontWeight.w800,
               ),
         ),
@@ -1229,6 +1262,7 @@ class _ColorOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final parsedColor = Color(
       int.parse('FF${color.replaceFirst('#', '')}', radix: 16),
     );
@@ -1243,7 +1277,7 @@ class _ColorOption extends StatelessWidget {
           shape: BoxShape.circle,
           color: parsedColor,
           border: Border.all(
-            color: isSelected ? AppColors.textPrimary : Colors.transparent,
+            color: isSelected ? colors.textPrimary : Colors.transparent,
             width: 3,
           ),
         ),

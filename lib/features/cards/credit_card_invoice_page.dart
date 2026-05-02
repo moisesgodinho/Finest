@@ -59,6 +59,13 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     final card = _findCard(state);
 
     if (card == null) {
+      if (state.isLoading) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Fatura')),
+          body: const Center(child: CircularProgressIndicator()),
+        );
+      }
+
       return Scaffold(
         appBar: AppBar(title: const Text('Fatura')),
         body: const Center(
@@ -345,7 +352,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -468,6 +475,7 @@ class _CategorySpendingChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final chartTotal = spending.fold<int>(
       0,
       (total, item) => total + item.amountCents,
@@ -493,6 +501,7 @@ class _CategorySpendingChart extends StatelessWidget {
                 painter: _CategoryDonutPainter(
                   spending: spending,
                   totalCents: chartTotal,
+                  baseColor: colors.border,
                 ),
               ),
               Column(
@@ -534,13 +543,15 @@ class _EmptyCategoryChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 18),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.pie_chart_outline_rounded,
-            color: AppColors.textSecondary,
+            color: colors.textSecondary,
             size: 42,
           ),
           const SizedBox(height: 10),
@@ -566,6 +577,7 @@ class _CategorySpendingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final percent = totalCents == 0 ? 0 : item.amountCents / totalCents;
 
     return Padding(
@@ -615,7 +627,7 @@ class _CategorySpendingRow extends StatelessWidget {
               '${(percent * 100).round()}%',
               textAlign: TextAlign.end,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                     fontWeight: FontWeight.w700,
                   ),
             ),
@@ -630,10 +642,12 @@ class _CategoryDonutPainter extends CustomPainter {
   const _CategoryDonutPainter({
     required this.spending,
     required this.totalCents,
+    required this.baseColor,
   });
 
   final List<_CategorySpending> spending;
   final int totalCents;
+  final Color baseColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -647,7 +661,7 @@ class _CategoryDonutPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.butt
-      ..color = AppColors.border;
+      ..color = baseColor;
     final segmentPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
@@ -677,7 +691,8 @@ class _CategoryDonutPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _CategoryDonutPainter oldDelegate) {
     return oldDelegate.spending != spending ||
-        oldDelegate.totalCents != totalCents;
+        oldDelegate.totalCents != totalCents ||
+        oldDelegate.baseColor != baseColor;
   }
 }
 
@@ -696,15 +711,17 @@ class _InvoiceHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: colors.primary,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.18),
+            color: colors.primary.withValues(alpha: 0.18),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -906,15 +923,17 @@ class _InvoiceNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.mint,
+        color: colors.accentSoft,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.primary),
+          Icon(icon, color: colors.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -945,11 +964,13 @@ class _PaymentAccountInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Row(
       children: [
         CircleAvatar(
-          backgroundColor: AppColors.mint,
-          foregroundColor: AppColors.primary,
+          backgroundColor: colors.accentSoft,
+          foregroundColor: colors.primary,
           child: const Icon(Icons.account_balance_wallet_rounded),
         ),
         const SizedBox(width: 12),
@@ -981,13 +1002,15 @@ class _EmptyInvoicePurchases extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 18),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.receipt_long_outlined,
-            color: AppColors.textSecondary,
+            color: colors.textSecondary,
             size: 42,
           ),
           const SizedBox(height: 10),
@@ -1017,6 +1040,7 @@ class _InvoicePurchaseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final installment = transaction.installmentNumber == null ||
             transaction.totalInstallments == null
         ? ''
@@ -1029,10 +1053,10 @@ class _InvoicePurchaseTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          const CircleAvatar(
-            backgroundColor: AppColors.mint,
-            foregroundColor: AppColors.primary,
-            child: Icon(Icons.shopping_bag_outlined, size: 20),
+          CircleAvatar(
+            backgroundColor: colors.accentSoft,
+            foregroundColor: colors.primary,
+            child: const Icon(Icons.shopping_bag_outlined, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(

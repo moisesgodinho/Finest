@@ -18,15 +18,17 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.36 : 0.06),
             blurRadius: 22,
             offset: const Offset(0, 10),
           ),

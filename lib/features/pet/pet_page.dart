@@ -44,6 +44,7 @@ class _PetHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentLevel = state.currentLevel;
+    final colors = context.colors;
 
     return SectionCard(
       padding: const EdgeInsets.all(20),
@@ -73,7 +74,7 @@ class _PetHeroCard extends StatelessWidget {
                     Text(
                       'Nível ${state.level}: ${currentLevel.title}',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.primary,
+                            color: colors.primary,
                           ),
                     ),
                   ],
@@ -86,7 +87,7 @@ class _PetHeroCard extends StatelessWidget {
           Text(
             currentLevel.concept,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: colors.textSecondary,
                 ),
           ),
           const SizedBox(height: 18),
@@ -103,7 +104,7 @@ class _PetHeroCard extends StatelessWidget {
               Text(
                 'faltam ${state.remainingXp} XP',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
               ),
             ],
@@ -114,9 +115,9 @@ class _PetHeroCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: state.progressToNextLevel,
               minHeight: 12,
-              backgroundColor: AppColors.border,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.primaryLight,
+              backgroundColor: colors.border,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                colors.primaryLight,
               ),
             ),
           ),
@@ -137,16 +138,18 @@ class _LevelBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.10),
+        color: colors.primary.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         'Nv. $level',
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: AppColors.primary,
+              color: colors.primary,
               fontWeight: FontWeight.w900,
             ),
       ),
@@ -297,15 +300,17 @@ class _PetMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Container(
       constraints: const BoxConstraints(minHeight: 142),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -339,7 +344,7 @@ class _PetMetricCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 7,
-              backgroundColor: AppColors.border,
+              backgroundColor: colors.border,
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -366,7 +371,7 @@ class _EvolutionTrackCard extends StatelessWidget {
               status: _statusFor(level.level),
             ),
             if (level != petEvolutionLevels.last)
-              const Divider(height: 20, color: AppColors.border),
+              Divider(height: 20, color: context.colors.border),
           ],
         ],
       ),
@@ -397,10 +402,11 @@ class _EvolutionLevelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final color = switch (status) {
       _EvolutionLevelStatus.completed => AppColors.success,
-      _EvolutionLevelStatus.current => AppColors.primary,
-      _EvolutionLevelStatus.locked => AppColors.textSecondary,
+      _EvolutionLevelStatus.current => colors.primary,
+      _EvolutionLevelStatus.locked => colors.textSecondary,
     };
     final icon = switch (status) {
       _EvolutionLevelStatus.completed => Icons.check_rounded,
@@ -434,7 +440,7 @@ class _EvolutionLevelTile extends StatelessWidget {
                 Text(
                   level.trigger,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: colors.textSecondary,
                       ),
                 ),
                 const SizedBox(height: 4),
@@ -458,6 +464,8 @@ class _MechanicsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return SectionCard(
       title: 'Mecânicas',
       child: Column(
@@ -465,20 +473,19 @@ class _MechanicsCard extends StatelessWidget {
           for (final mechanic in petMechanics) ...[
             _MechanicRow(mechanic: mechanic),
             if (mechanic != petMechanics.last)
-              const Divider(height: 22, color: AppColors.border),
+              Divider(height: 22, color: context.colors.border),
           ],
           const SizedBox(height: 14),
           DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.mint,
+              color: colors.accentSoft,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_month_rounded,
-                      color: AppColors.primary),
+                  Icon(Icons.calendar_month_rounded, color: colors.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -503,12 +510,14 @@ class _MechanicRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
-          backgroundColor: AppColors.primary.withValues(alpha: 0.10),
-          foregroundColor: AppColors.primary,
+          backgroundColor: colors.primary.withValues(alpha: 0.10),
+          foregroundColor: colors.primary,
           child: Icon(_iconFor(mechanic.title), size: 20),
         ),
         const SizedBox(width: 12),
@@ -531,7 +540,7 @@ class _MechanicRow extends StatelessWidget {
               Text(
                 mechanic.financialMeaning,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
               ),
             ],

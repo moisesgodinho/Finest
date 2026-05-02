@@ -20,6 +20,7 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final child = isLoading
         ? const SizedBox.square(
             dimension: 22,
@@ -50,9 +51,9 @@ class AppButton extends StatelessWidget {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: colors.textPrimary,
           minimumSize: const Size.fromHeight(54),
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: colors.border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),

@@ -483,17 +483,12 @@ class CardsViewModel extends StateNotifier<CardsState> {
       ],
       categories: _categories,
       subcategories: _subcategories,
-      invoices: [
-        for (final invoice in _invoices)
-          if (cardsById[invoice.creditCardId] != null)
-            _mapInvoice(
-              invoice,
-              card: cardsById[invoice.creditCardId]!,
-              accountsById: accountsById,
-              categoriesById: categoriesById,
-              subcategoriesById: subcategoriesById,
-            ),
-      ],
+      invoices: _mapInvoicePreviews(
+        cardsById: cardsById,
+        accountsById: accountsById,
+        categoriesById: categoriesById,
+        subcategoriesById: subcategoriesById,
+      ),
       isLoading: false,
       clearError: true,
     );
@@ -587,16 +582,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required Map<int, SubcategoryModel> subcategoriesById,
   }) {
     final account = accountsById[invoice.paymentAccountId];
-    final transactions = _transactions
-        .where(
-          (transaction) =>
-              transaction.paymentMethod == 'credit_card' &&
-              transaction.creditCardId == invoice.creditCardId &&
-              transaction.invoiceMonth == invoice.month &&
-              transaction.invoiceYear == invoice.year,
-        )
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final transactions = _creditCardTransactionsFor(
+      cardId: invoice.creditCardId,
+      month: invoice.month,
+      year: invoice.year,
+    );
     final transactionTotal = transactions.fold<int>(
       0,
       (total, transaction) => total + transaction.amount,
@@ -629,23 +619,184 @@ class CardsViewModel extends StateNotifier<CardsState> {
       cardColor: _parseColor(card.color),
       transactions: [
         for (final transaction in transactions)
-          CreditCardInvoiceTransactionPreview(
-            id: transaction.id,
-            description: transaction.description,
-            amountCents: transaction.amount,
-            date: transaction.date,
-            categoryId: transaction.categoryId,
-            categoryName:
-                categoriesById[transaction.categoryId]?.name ?? 'Categoria',
-            subcategoryId: transaction.subcategoryId,
-            subcategoryName: transaction.subcategoryId == null
-                ? null
-                : subcategoriesById[transaction.subcategoryId]?.name,
-            installmentNumber: transaction.installmentNumber,
-            totalInstallments: transaction.totalInstallments,
+          _mapInvoiceTransaction(
+            transaction,
+            categoriesById: categoriesById,
+            subcategoriesById: subcategoriesById,
           ),
       ],
     );
+  }
+
+  List<CreditCardInvoicePreview> _mapInvoicePreviews({
+    required Map<int, CreditCard> cardsById,
+    required Map<int, Account> accountsById,
+    required Map<int, CategoryModel> categoriesById,
+    required Map<int, SubcategoryModel> subcategoriesById,
+  }) {
+    final mappedKeys = <String>{};
+    final previews = <CreditCardInvoicePreview>[];
+
+    for (final invoice in _invoices) {
+      final card = cardsById[invoice.creditCardId];
+      if (card == null) {
+        continue;
+      }
+
+      mappedKeys.add(
+        _invoiceKey(
+          cardId: invoice.creditCardId,
+          month: invoice.month,
+          year: invoice.year,
+        ),
+      );
+      previews.add(
+        _mapInvoice(
+          invoice,
+          card: card,
+          accountsById: accountsById,
+          categoriesById: categoriesById,
+          subcategoriesById: subcategoriesById,
+        ),
+      );
+    }
+
+    for (final transaction in _transactions) {
+      final creditCardId = transaction.creditCardId;
+      if (transaction.paymentMethod != 'credit_card' ||
+          creditCardId == null ||
+          cardsById[creditCardId] == null) {
+        continue;
+      }
+
+      final invoiceMonth = transaction.invoiceMonth ?? transaction.date.month;
+      final invoiceYear = transaction.invoiceYear ?? transaction.date.year;
+      final key = _invoiceKey(
+        cardId: creditCardId,
+        month: invoiceMonth,
+        year: invoiceYear,
+      );
+      if (!mappedKeys.add(key)) {
+        continue;
+      }
+
+      previews.add(
+        _mapSyntheticInvoice(
+          card: cardsById[creditCardId]!,
+          month: invoiceMonth,
+          year: invoiceYear,
+          accountsById: accountsById,
+          categoriesById: categoriesById,
+          subcategoriesById: subcategoriesById,
+        ),
+      );
+    }
+
+    previews.sort((a, b) {
+      final yearComparison = b.year.compareTo(a.year);
+      if (yearComparison != 0) {
+        return yearComparison;
+      }
+      return b.month.compareTo(a.month);
+    });
+    return previews;
+  }
+
+  CreditCardInvoicePreview _mapSyntheticInvoice({
+    required CreditCard card,
+    required int month,
+    required int year,
+    required Map<int, Account> accountsById,
+    required Map<int, CategoryModel> categoriesById,
+    required Map<int, SubcategoryModel> subcategoriesById,
+  }) {
+    final transactions = _creditCardTransactionsFor(
+      cardId: card.id,
+      month: month,
+      year: year,
+    );
+    final amount = transactions.fold<int>(
+      0,
+      (total, transaction) => total + transaction.amount,
+    );
+    final status = _isInvoiceClosed(
+      month: month,
+      year: year,
+      closingDay: card.closingDay,
+    )
+        ? 'closed'
+        : 'open';
+    final paymentAccount = accountsById[card.defaultPaymentAccountId];
+
+    return CreditCardInvoicePreview(
+      id: 0,
+      cardId: card.id,
+      cardName: card.name,
+      cardLastDigits: card.lastDigits,
+      month: month,
+      year: year,
+      amountCents: amount,
+      status: status,
+      statusLabel: _invoiceStatusLabel(status),
+      dueDate: DateTime(year, month, _safeDay(year, month, card.dueDay)),
+      paymentAccountId: card.defaultPaymentAccountId,
+      paymentAccountName: paymentAccount?.name,
+      cardColor: _parseColor(card.color),
+      transactions: [
+        for (final transaction in transactions)
+          _mapInvoiceTransaction(
+            transaction,
+            categoriesById: categoriesById,
+            subcategoriesById: subcategoriesById,
+          ),
+      ],
+    );
+  }
+
+  List<FinanceTransaction> _creditCardTransactionsFor({
+    required int cardId,
+    required int month,
+    required int year,
+  }) {
+    return _transactions
+        .where(
+          (transaction) =>
+              transaction.paymentMethod == 'credit_card' &&
+              transaction.creditCardId == cardId &&
+              (transaction.invoiceMonth ?? transaction.date.month) == month &&
+              (transaction.invoiceYear ?? transaction.date.year) == year,
+        )
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  CreditCardInvoiceTransactionPreview _mapInvoiceTransaction(
+    FinanceTransaction transaction, {
+    required Map<int, CategoryModel> categoriesById,
+    required Map<int, SubcategoryModel> subcategoriesById,
+  }) {
+    return CreditCardInvoiceTransactionPreview(
+      id: transaction.id,
+      description: transaction.description,
+      amountCents: transaction.amount,
+      date: transaction.date,
+      categoryId: transaction.categoryId,
+      categoryName: categoriesById[transaction.categoryId]?.name ?? 'Categoria',
+      subcategoryId: transaction.subcategoryId,
+      subcategoryName: transaction.subcategoryId == null
+          ? null
+          : subcategoriesById[transaction.subcategoryId]?.name,
+      installmentNumber: transaction.installmentNumber,
+      totalInstallments: transaction.totalInstallments,
+    );
+  }
+
+  String _invoiceKey({
+    required int cardId,
+    required int month,
+    required int year,
+  }) {
+    return '$cardId-$year-$month';
   }
 
   String _brandLabel(String brand) {

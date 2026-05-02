@@ -27,6 +27,7 @@ class HomeState {
     required this.expenseCents,
     required this.pendingIncomeCents,
     required this.pendingExpenseCents,
+    required this.creditCardInvoiceCents,
     required this.creditCard,
     required this.categories,
     required this.recentTransactions,
@@ -44,6 +45,7 @@ class HomeState {
       expenseCents: 0,
       pendingIncomeCents: 0,
       pendingExpenseCents: 0,
+      creditCardInvoiceCents: 0,
       creditCard: const CreditCardPreview(
         id: 0,
         name: 'Nenhum cartão',
@@ -51,7 +53,7 @@ class HomeState {
         brand: 'other',
         brandLabel: 'Outra',
         invoiceCents: 0,
-        limitCents: 500000,
+        limitCents: 0,
         usedPercent: 0,
         color: AppColors.primaryDark,
         colorHex: '#004D3A',
@@ -73,6 +75,7 @@ class HomeState {
   final int expenseCents;
   final int pendingIncomeCents;
   final int pendingExpenseCents;
+  final int creditCardInvoiceCents;
   final CreditCardPreview creditCard;
   final List<CategoryExpensePreview> categories;
   final List<TransactionPreview> recentTransactions;
@@ -87,6 +90,48 @@ class HomeState {
         .toDouble();
   }
 
+  int get monthlyFlowBaseCents {
+    return incomeCents > expenseCents ? incomeCents : expenseCents;
+  }
+
+  double get incomeProgressPercent {
+    if (monthlyFlowBaseCents == 0) {
+      return 0;
+    }
+    return (incomeCents / monthlyFlowBaseCents).clamp(0.0, 1.0).toDouble();
+  }
+
+  double get expenseProgressPercent {
+    if (monthlyFlowBaseCents == 0) {
+      return 0;
+    }
+    return (expenseCents / monthlyFlowBaseCents).clamp(0.0, 1.0).toDouble();
+  }
+
+  int get totalPendingOutflowCents {
+    return pendingExpenseCents + creditCardInvoiceCents;
+  }
+
+  String get balanceVariationLabel {
+    if (currentBalanceCents == 0 && initialMonthBalanceCents == 0) {
+      return 'Sem saldo cadastrado';
+    }
+    if (initialMonthBalanceCents == 0) {
+      return 'Saldo atualizado pelas contas';
+    }
+
+    final difference = currentBalanceCents - initialMonthBalanceCents;
+    if (difference == 0) {
+      return 'Sem variaÃ§Ã£o vs. inÃ­cio do mÃªs';
+    }
+
+    final percent = (difference / initialMonthBalanceCents.abs()) * 100;
+    final formattedPercent =
+        percent.abs().toStringAsFixed(1).replaceAll('.', ',');
+    final direction = difference > 0 ? 'acima' : 'abaixo';
+    return '$formattedPercent% $direction do inÃ­cio do mÃªs';
+  }
+
   HomeState copyWith({
     int? currentBalanceCents,
     int? projectedBalanceCents,
@@ -95,6 +140,7 @@ class HomeState {
     int? expenseCents,
     int? pendingIncomeCents,
     int? pendingExpenseCents,
+    int? creditCardInvoiceCents,
     CreditCardPreview? creditCard,
     List<CategoryExpensePreview>? categories,
     List<TransactionPreview>? recentTransactions,
@@ -112,6 +158,8 @@ class HomeState {
       expenseCents: expenseCents ?? this.expenseCents,
       pendingIncomeCents: pendingIncomeCents ?? this.pendingIncomeCents,
       pendingExpenseCents: pendingExpenseCents ?? this.pendingExpenseCents,
+      creditCardInvoiceCents:
+          creditCardInvoiceCents ?? this.creditCardInvoiceCents,
       creditCard: creditCard ?? this.creditCard,
       categories: categories ?? this.categories,
       recentTransactions: recentTransactions ?? this.recentTransactions,
@@ -145,10 +193,12 @@ class HomeViewModel extends StateNotifier<HomeState> {
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<CreditCard>>? _creditCardsSubscription;
+  StreamSubscription<List<CreditCardInvoice>>? _creditCardInvoicesSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
   List<Account> _accounts = [];
   List<CategoryModel> _categories = [];
   List<CreditCard> _creditCards = [];
+  List<CreditCardInvoice> _creditCardInvoices = [];
   List<FinanceTransaction> _transactions = [];
 
   void toggleBalanceVisibility() {
@@ -179,6 +229,14 @@ class HomeViewModel extends StateNotifier<HomeState> {
     _creditCardsSubscription = _creditCardRepository.watchCards(userId).listen(
       (cards) {
         _creditCards = cards;
+        _publishState();
+      },
+    );
+
+    _creditCardInvoicesSubscription =
+        _creditCardRepository.watchInvoices(userId).listen(
+      (invoices) {
+        _creditCardInvoices = invoices;
         _publishState();
       },
     );
@@ -240,14 +298,24 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.type == 'expense',
         )
         .fold<int>(0, (total, transaction) => total + transaction.amount);
+    final creditCardInvoiceTotalsByCard =
+        _openCurrentCreditCardInvoiceTotalsByCard(now);
+    final creditCardInvoiceCents = creditCardInvoiceTotalsByCard.values
+        .fold<int>(0, (total, amount) => total + amount);
+    final paidCreditCardInvoiceCents =
+        _paidCreditCardInvoicesInMonth(firstDay, lastDay);
     final currentBalanceCents = _accounts.fold<int>(
       0,
       (total, account) => total + account.currentBalance,
     );
-    final initialMonthBalanceCents =
-        currentBalanceCents - paidAccountIncomeCents + paidAccountExpenseCents;
-    final projectedBalanceCents =
-        currentBalanceCents + pendingIncomeCents - pendingExpenseCents;
+    final initialMonthBalanceCents = currentBalanceCents -
+        paidAccountIncomeCents +
+        paidAccountExpenseCents +
+        paidCreditCardInvoiceCents;
+    final projectedBalanceCents = currentBalanceCents +
+        pendingIncomeCents -
+        pendingExpenseCents -
+        creditCardInvoiceCents;
     final categoryMap = {
       for (final category in _categories) category.id: category,
     };
@@ -261,7 +329,11 @@ class HomeViewModel extends StateNotifier<HomeState> {
       expenseCents: expenseCents,
       pendingIncomeCents: pendingIncomeCents,
       pendingExpenseCents: pendingExpenseCents,
-      creditCard: _buildPrimaryCard(accountsById),
+      creditCardInvoiceCents: creditCardInvoiceCents,
+      creditCard: _buildPrimaryCard(
+        accountsById,
+        creditCardInvoiceTotalsByCard,
+      ),
       categories: _buildCategoryPreviews(
         monthTransactions: monthTransactions,
         categoryMap: categoryMap,
@@ -271,7 +343,10 @@ class HomeViewModel extends StateNotifier<HomeState> {
     );
   }
 
-  CreditCardPreview _buildPrimaryCard(Map<int, Account> accountsById) {
+  CreditCardPreview _buildPrimaryCard(
+    Map<int, Account> accountsById,
+    Map<int, int> creditCardInvoiceTotalsByCard,
+  ) {
     CreditCard? selectedCard;
     for (final card in _creditCards) {
       if (card.isPrimary) {
@@ -286,9 +361,10 @@ class HomeViewModel extends StateNotifier<HomeState> {
     }
 
     final defaultAccount = accountsById[selectedCard.defaultPaymentAccountId];
-    final usedPercent = selectedCard.limit == 0
-        ? 0.0
-        : selectedCard.currentInvoice / selectedCard.limit;
+    final invoiceCents = creditCardInvoiceTotalsByCard[selectedCard.id] ??
+        selectedCard.currentInvoice;
+    final usedPercent =
+        selectedCard.limit == 0 ? 0.0 : invoiceCents / selectedCard.limit;
 
     return CreditCardPreview(
       id: selectedCard.id,
@@ -297,7 +373,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
       lastDigits: selectedCard.lastDigits,
       brand: selectedCard.brand,
       brandLabel: _brandLabel(selectedCard.brand),
-      invoiceCents: selectedCard.currentInvoice,
+      invoiceCents: invoiceCents,
       limitCents: selectedCard.limit,
       usedPercent: usedPercent.clamp(0.0, 1.0).toDouble(),
       color: _parseColor(selectedCard.color),
@@ -310,7 +386,76 @@ class HomeViewModel extends StateNotifier<HomeState> {
     );
   }
 
+  Map<int, int> _openCurrentCreditCardInvoiceTotalsByCard(DateTime month) {
+    final totals = <int, int>{};
+
+    for (final card in _creditCards) {
+      final invoice = _invoiceForCardMonth(
+        cardId: card.id,
+        month: month.month,
+        year: month.year,
+      );
+      if (invoice?.status == 'paid') {
+        totals[card.id] = 0;
+        continue;
+      }
+
+      final transactionTotal = _transactions
+          .where(
+            (transaction) =>
+                transaction.paymentMethod == 'credit_card' &&
+                transaction.creditCardId == card.id &&
+                (transaction.invoiceMonth ?? transaction.date.month) ==
+                    month.month &&
+                (transaction.invoiceYear ?? transaction.date.year) ==
+                    month.year,
+          )
+          .fold<int>(0, (total, transaction) => total + transaction.amount);
+
+      totals[card.id] = transactionTotal > 0
+          ? transactionTotal
+          : invoice?.amount ?? card.currentInvoice;
+    }
+
+    return totals;
+  }
+
+  CreditCardInvoice? _invoiceForCardMonth({
+    required int cardId,
+    required int month,
+    required int year,
+  }) {
+    for (final invoice in _creditCardInvoices) {
+      if (invoice.creditCardId == cardId &&
+          invoice.month == month &&
+          invoice.year == year) {
+        return invoice;
+      }
+    }
+    return null;
+  }
+
+  int _paidCreditCardInvoicesInMonth(DateTime firstDay, DateTime lastDay) {
+    return _creditCardInvoices.where((invoice) {
+      final paidAt = invoice.paidAt;
+      if (invoice.status != 'paid' || paidAt == null) {
+        return false;
+      }
+      return !paidAt.isBefore(firstDay) && !paidAt.isAfter(lastDay);
+    }).fold<int>(0, (total, invoice) => total + invoice.amount);
+  }
+
   DateTime _referenceDate(FinanceTransaction transaction) {
+    if (transaction.paymentMethod == 'credit_card' &&
+        transaction.invoiceMonth != null &&
+        transaction.invoiceYear != null) {
+      return DateTime(
+        transaction.invoiceYear!,
+        transaction.invoiceMonth!,
+        1,
+      );
+    }
+
     return transaction.dueDate ?? transaction.date;
   }
 
@@ -404,6 +549,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     _accountsSubscription?.cancel();
     _categoriesSubscription?.cancel();
     _creditCardsSubscription?.cancel();
+    _creditCardInvoicesSubscription?.cancel();
     _transactionsSubscription?.cancel();
     super.dispose();
   }

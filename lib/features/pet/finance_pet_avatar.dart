@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import '../../core/theme/app_colors.dart';
 
@@ -20,6 +21,16 @@ class FinancePetAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    if (level <= 1) {
+      return _FinancePetLevelOneModel(
+        size: size,
+        showEnvironment: showEnvironment,
+        colors: colors,
+      );
+    }
+
     return SizedBox.square(
       dimension: size,
       child: CustomPaint(
@@ -27,6 +38,62 @@ class FinancePetAvatar extends StatelessWidget {
           level: level,
           progress: progress.clamp(0.0, 1.0).toDouble(),
           showEnvironment: showEnvironment,
+          colors: colors,
+        ),
+      ),
+    );
+  }
+}
+
+class _FinancePetLevelOneModel extends StatelessWidget {
+  const _FinancePetLevelOneModel({
+    required this.size,
+    required this.showEnvironment,
+    required this.colors,
+  });
+
+  static const _modelPath = 'assets/models/tamago.glb';
+
+  final double size;
+  final bool showEnvironment;
+  final AppPalette colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(size * 0.24);
+
+    return SizedBox.square(
+      dimension: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: showEnvironment ? null : Colors.transparent,
+          gradient: showEnvironment
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors.isDark
+                      ? [
+                          colors.surfaceElevated,
+                          colors.accentSoft,
+                        ]
+                      : const [
+                          Color(0xFFEAF8EF),
+                          Color(0xFFCDEEDD),
+                        ],
+                )
+              : null,
+          borderRadius: borderRadius,
+        ),
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: const ModelViewer(
+            src: _modelPath,
+            alt: 'FinancePet nivel 1',
+            autoRotate: true,
+            cameraControls: false,
+            disableZoom: true,
+            backgroundColor: Colors.transparent,
+          ),
         ),
       ),
     );
@@ -38,11 +105,13 @@ class _FinancePetAvatarPainter extends CustomPainter {
     required this.level,
     required this.progress,
     required this.showEnvironment,
+    required this.colors,
   });
 
   final int level;
   final double progress;
   final bool showEnvironment;
+  final AppPalette colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -98,7 +167,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
     );
 
     final wavePaint = Paint()
-      ..color = AppColors.primaryLight.withValues(alpha: 0.16)
+      ..color = colors.primaryLight.withValues(alpha: 0.16)
       ..style = PaintingStyle.stroke
       ..strokeWidth = unit * 0.014;
 
@@ -119,9 +188,9 @@ class _FinancePetAvatarPainter extends CustomPainter {
 
     if (level >= 6) {
       final housePaint = Paint()
-        ..color = AppColors.primary.withValues(alpha: 0.14);
+        ..color = colors.primary.withValues(alpha: 0.14);
       final roofPaint = Paint()
-        ..color = AppColors.primaryDark.withValues(alpha: 0.14);
+        ..color = colors.primaryDark.withValues(alpha: 0.14);
       final base = Rect.fromLTWH(
         unit * 0.10,
         unit * 0.56,
@@ -141,7 +210,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
 
       if (level >= 9) {
         final towerPaint = Paint()
-          ..color = AppColors.primary.withValues(alpha: 0.13);
+          ..color = colors.primary.withValues(alpha: 0.13);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(unit * 0.10, unit * 0.45, unit * 0.07, unit * 0.30),
@@ -159,8 +228,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
       }
     }
 
-    final groundPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.12);
+    final groundPaint = Paint()..color = colors.primary.withValues(alpha: 0.12);
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(size.width / 2, unit * 0.80),
@@ -173,7 +241,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
 
   void _paintAura(Canvas canvas, Offset center, double unit) {
     final auraPaint = Paint()
-      ..color = AppColors.primaryLight.withValues(alpha: 0.18)
+      ..color = colors.primaryLight.withValues(alpha: 0.18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = unit * 0.035;
 
@@ -196,8 +264,8 @@ class _FinancePetAvatarPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppColors.primary.withValues(alpha: 0.26),
-          AppColors.primaryDark.withValues(alpha: 0.36),
+          colors.primary.withValues(alpha: 0.26),
+          colors.primaryDark.withValues(alpha: 0.36),
         ],
       ).createShader(
         Rect.fromCenter(
@@ -269,13 +337,13 @@ class _FinancePetAvatarPainter extends CustomPainter {
     canvas.drawOval(shellRect, shellPaint);
 
     final outlinePaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.24)
+      ..color = colors.primary.withValues(alpha: 0.24)
       ..style = PaintingStyle.stroke
       ..strokeWidth = unit * 0.018;
     canvas.drawOval(shellRect, outlinePaint);
 
     final crackPaint = Paint()
-      ..color = AppColors.primaryDark.withValues(alpha: 0.35)
+      ..color = colors.primaryDark.withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = unit * 0.014
       ..strokeCap = StrokeCap.round
@@ -302,8 +370,8 @@ class _FinancePetAvatarPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color.lerp(const Color(0xFF9FEBC0), AppColors.primaryLight, 0.30)!,
-          AppColors.primary,
+          Color.lerp(const Color(0xFF9FEBC0), colors.primaryLight, 0.30)!,
+          colors.primary,
         ],
       ).createShader(bodyRect);
     canvas.drawRRect(
@@ -321,7 +389,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
       bellyPaint,
     );
 
-    final leafPaint = Paint()..color = AppColors.primaryLight;
+    final leafPaint = Paint()..color = colors.primaryLight;
     final leaf = Path()
       ..moveTo(center.dx, center.dy - unit * 0.30)
       ..quadraticBezierTo(
@@ -360,7 +428,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
   }
 
   void _paintEyes(Canvas canvas, Offset center, double unit, double radius) {
-    final eyePaint = Paint()..color = AppColors.primaryDark;
+    final eyePaint = Paint()..color = colors.primaryDark;
     final shinePaint = Paint()..color = Colors.white;
     for (final dx in [-unit * 0.10, unit * 0.10]) {
       final eyeCenter = center.translate(dx, 0);
@@ -374,7 +442,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
   }
 
   void _paintLegs(Canvas canvas, Offset center, double unit) {
-    final legPaint = Paint()..color = AppColors.primaryDark;
+    final legPaint = Paint()..color = colors.primaryDark;
     for (final dx in [-unit * 0.10, unit * 0.10]) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -391,7 +459,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
   }
 
   void _paintBoots(Canvas canvas, Offset center, double unit) {
-    final bootPaint = Paint()..color = AppColors.warning;
+    final bootPaint = Paint()..color = colors.warning;
     for (final dx in [-unit * 0.10, unit * 0.10]) {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -409,7 +477,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
 
   void _paintMysticHalo(Canvas canvas, Offset center, double unit) {
     final haloPaint = Paint()
-      ..color = AppColors.primaryLight.withValues(alpha: 0.46)
+      ..color = colors.primaryLight.withValues(alpha: 0.46)
       ..style = PaintingStyle.stroke
       ..strokeWidth = unit * 0.020;
     canvas.drawOval(
@@ -438,6 +506,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
   bool shouldRepaint(covariant _FinancePetAvatarPainter oldDelegate) {
     return oldDelegate.level != level ||
         oldDelegate.progress != progress ||
-        oldDelegate.showEnvironment != showEnvironment;
+        oldDelegate.showEnvironment != showEnvironment ||
+        oldDelegate.colors != colors;
   }
 }

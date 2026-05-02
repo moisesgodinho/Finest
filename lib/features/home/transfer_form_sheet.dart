@@ -392,14 +392,16 @@ class _MissingRequirement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
             size: 44,
-            color: AppColors.textSecondary,
+            color: colors.textSecondary,
           ),
           const SizedBox(height: 10),
           Text(

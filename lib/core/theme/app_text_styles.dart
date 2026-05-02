@@ -5,6 +5,18 @@ import 'app_colors.dart';
 class AppTextStyles {
   const AppTextStyles._();
 
+  static TextTheme textTheme(AppPalette colors) {
+    return TextTheme(
+      headlineLarge: headlineLarge.copyWith(color: colors.textPrimary),
+      headlineMedium: headlineMedium.copyWith(color: colors.textPrimary),
+      titleLarge: titleLarge.copyWith(color: colors.textPrimary),
+      titleMedium: titleMedium.copyWith(color: colors.textPrimary),
+      bodyLarge: bodyLarge.copyWith(color: colors.textPrimary),
+      bodyMedium: bodyMedium.copyWith(color: colors.textSecondary),
+      labelLarge: labelLarge.copyWith(color: colors.textPrimary),
+    );
+  }
+
   static const headlineLarge = TextStyle(
     fontSize: 34,
     fontWeight: FontWeight.w800,
