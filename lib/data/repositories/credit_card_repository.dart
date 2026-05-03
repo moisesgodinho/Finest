@@ -348,8 +348,14 @@ class DriftCreditCardRepository implements CreditCardRepository {
 
     return transactions.fold<int>(
       0,
-      (total, transaction) => total + transaction.amount,
+      (total, transaction) => total + _invoiceAmountDelta(transaction),
     );
+  }
+
+  int _invoiceAmountDelta(FinanceTransaction transaction) {
+    return transaction.type == 'income'
+        ? -transaction.amount
+        : transaction.amount;
   }
 
   Future<void> _ensureAccountBelongsToUser({

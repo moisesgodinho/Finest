@@ -955,18 +955,11 @@ class _TransactionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 108),
-                child: Text(
-                  '$amountPrefix${CurrencyUtils.formatCents(transaction.amountCents)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: amountColor,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
+              _TransactionAmountDate(
+                amount: CurrencyUtils.formatCents(transaction.amountCents),
+                date: _formatDateShort(transaction.date),
+                prefix: amountPrefix,
+                color: amountColor,
               ),
               PopupMenuButton<String>(
                 tooltip: 'Ações',
@@ -1021,6 +1014,55 @@ class _SmallStatusBadge extends StatelessWidget {
               color: AppColors.warning,
               fontWeight: FontWeight.w900,
             ),
+      ),
+    );
+  }
+}
+
+class _TransactionAmountDate extends StatelessWidget {
+  const _TransactionAmountDate({
+    required this.amount,
+    required this.date,
+    required this.prefix,
+    required this.color,
+  });
+
+  final String amount;
+  final String date;
+  final String prefix;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 112),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '$prefix$amount',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            date,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
       ),
     );
   }

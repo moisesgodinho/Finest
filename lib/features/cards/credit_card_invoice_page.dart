@@ -81,6 +81,9 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     );
     final invoiceMonths = state.invoiceMonthsForCard(card);
     final expenseCategories = state.expenseCategories;
+    final categoriesById = {
+      for (final category in state.categories) category.id: category,
+    };
     final categorySpending = _buildCategorySpending(
       invoice,
       expenseCategories,
@@ -108,22 +111,44 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
           ),
         ],
       ),
+      floatingActionButton: invoice.isPaid
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _openAddInvoiceEntrySheet(
+                context,
+                viewModel,
+                card,
+                invoice,
+                state,
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Registro'),
+            ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
           children: [
             if (state.isLoading) ...[
               const LinearProgressIndicator(minHeight: 3),
               const SizedBox(height: 14),
             ],
             _InvoiceHero(
+              card: card,
               invoice: invoice,
               onPrevious: () => _moveMonth(-1),
               onNext: () => _moveMonth(1),
-              onPay: invoice.canPay && invoice.id > 0
-                  ? () => _confirmPayInvoice(context, viewModel, invoice)
-                  : null,
             ),
+            if (invoice.canPay && invoice.id > 0) ...[
+              const SizedBox(height: 12),
+              _PayInvoiceButton(
+                amountCents: invoice.amountCents,
+                onPressed: () => _confirmPayInvoice(
+                  context,
+                  viewModel,
+                  invoice,
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             if (invoice.isPaid)
               const _LockedInvoiceNotice()
@@ -142,7 +167,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
             ),
             const SizedBox(height: 14),
             SectionCard(
-              title: 'Compras da fatura',
+              title: 'Registros da fatura',
               trailing: Text(
                 '${invoice.transactions.length} itens',
                 style: Theme.of(context).textTheme.bodyMedium,
@@ -154,13 +179,16 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
                         for (final transaction in invoice.transactions)
                           _InvoicePurchaseTile(
                             transaction: transaction,
+                            category: categoriesById[transaction.categoryId],
                             isLocked: invoice.isPaid,
                             onEdit: () => _openEditPurchaseSheet(
                               context,
                               viewModel,
                               invoice,
                               transaction,
-                              expenseCategories,
+                              transaction.isCredit
+                                  ? state.incomeCategories
+                                  : state.expenseCategories,
                               state.subcategories,
                             ),
                             onDelete: () => _confirmDeletePurchase(
@@ -190,6 +218,9 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     final countsByCategory = <int, int>{};
 
     for (final transaction in invoice.transactions) {
+      if (!transaction.isExpense) {
+        continue;
+      }
       totalsByCategory.update(
         transaction.categoryId,
         (total) => total + transaction.amountCents,
@@ -210,6 +241,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
               _categoryNameFromInvoice(invoice, entry.key),
           amountCents: entry.value,
           transactionCount: countsByCategory[entry.key] ?? 0,
+          icon: categoriesById[entry.key]?.icon ?? Icons.category_rounded,
           color: categoriesById[entry.key]?.color,
         ),
     ]..sort((a, b) => b.amountCents.compareTo(a.amountCents));
@@ -326,6 +358,70 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     }
   }
 
+  Future<void> _openAddInvoiceEntrySheet(
+    BuildContext context,
+    CardsViewModel viewModel,
+    CreditCardPreview card,
+    CreditCardInvoicePreview invoice,
+    CardsState state,
+  ) async {
+    if (invoice.isPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fatura paga não pode ser alterada.')),
+      );
+      return;
+    }
+
+    if (card.defaultPaymentAccountId == null &&
+        invoice.paymentAccountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Defina uma conta padrão para este cartão.'),
+        ),
+      );
+      return;
+    }
+
+    final entry = await showModalBottomSheet<_InvoiceEntryData>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return _InvoiceEntrySheet(
+          invoice: invoice,
+          expenseCategories: state.expenseCategories,
+          incomeCategories: state.incomeCategories,
+          subcategories: state.subcategories,
+        );
+      },
+    );
+
+    if (entry == null) {
+      return;
+    }
+
+    await viewModel.addInvoiceEntry(
+      card: card,
+      invoice: invoice,
+      entryKind: entry.kind.value,
+      description: entry.description,
+      amountCents: entry.amountCents,
+      categoryId: entry.categoryId,
+      subcategoryId: entry.subcategoryId,
+      date: entry.date,
+    );
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${entry.kind.label} adicionado.')),
+      );
+    }
+  }
+
   Future<void> _openEditPurchaseSheet(
     BuildContext context,
     CardsViewModel viewModel,
@@ -341,9 +437,11 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       return;
     }
     if (categories.isEmpty) {
+      final categoryType = transaction.isCredit ? 'receita' : 'despesa';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Crie uma categoria de despesa primeiro.')),
+        SnackBar(
+          content: Text('Crie uma categoria de $categoryType primeiro.'),
+        ),
       );
       return;
     }
@@ -381,7 +479,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Compra atualizada.')),
+        const SnackBar(content: Text('Registro atualizado.')),
       );
     }
   }
@@ -403,7 +501,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Remover compra?'),
+          title: const Text('Remover registro?'),
           content: const Text(
             'O total da fatura será recalculado automaticamente.',
           ),
@@ -432,7 +530,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Compra removida.')),
+        const SnackBar(content: Text('Registro removido.')),
       );
     }
   }
@@ -444,6 +542,7 @@ class _CategorySpending {
     required this.name,
     required this.amountCents,
     required this.transactionCount,
+    required this.icon,
     this.color,
   });
 
@@ -451,6 +550,7 @@ class _CategorySpending {
   final String name;
   final int amountCents;
   final int transactionCount;
+  final IconData icon;
   final Color? color;
 
   _CategorySpending copyWith({
@@ -461,6 +561,7 @@ class _CategorySpending {
       name: name,
       amountCents: amountCents,
       transactionCount: transactionCount,
+      icon: icon,
       color: color ?? this.color,
     );
   }
@@ -584,13 +685,9 @@ class _CategorySpendingRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: item.color,
-              shape: BoxShape.circle,
-            ),
+          _CategoryIconBadge(
+            icon: item.icon,
+            color: item.color ?? AppColors.primary,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -633,6 +730,33 @@ class _CategorySpendingRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CategoryIconBadge extends StatelessWidget {
+  const _CategoryIconBadge({
+    required this.icon,
+    required this.color,
+  });
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        icon,
+        color: color,
+        size: 20,
       ),
     );
   }
@@ -698,157 +822,438 @@ class _CategoryDonutPainter extends CustomPainter {
 
 class _InvoiceHero extends StatelessWidget {
   const _InvoiceHero({
+    required this.card,
     required this.invoice,
     required this.onPrevious,
     required this.onNext,
-    required this.onPay,
+  });
+
+  final CreditCardPreview card;
+  final CreditCardInvoicePreview invoice;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _InvoiceMonthSelector(
+          invoice: invoice,
+          onPrevious: onPrevious,
+          onNext: onNext,
+        ),
+        const SizedBox(height: 12),
+        _InvoiceCreditCardVisual(
+          card: card,
+          invoice: invoice,
+        ),
+      ],
+    );
+  }
+}
+
+class _InvoiceMonthSelector extends StatelessWidget {
+  const _InvoiceMonthSelector({
+    required this.invoice,
+    required this.onPrevious,
+    required this.onNext,
   });
 
   final CreditCardInvoicePreview invoice;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
-  final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.primary,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: colors.primary.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Row(
+      children: [
+        IconButton.filledTonal(
+          onPressed: onPrevious,
+          tooltip: 'Fatura anterior',
+          icon: const Icon(Icons.chevron_left_rounded),
+        ),
+        Expanded(
+          child: Column(
             children: [
-              IconButton.filledTonal(
-                onPressed: onPrevious,
-                tooltip: 'Fatura anterior',
-                icon: const Icon(Icons.chevron_left_rounded),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      AppDateUtils.monthYearLabel(
-                        DateTime(invoice.year, invoice.month),
-                      ),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
+              Text(
+                AppDateUtils.monthYearLabel(
+                  DateTime(invoice.year, invoice.month),
+                ),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 4),
-                    _InvoiceStatusBadge(invoice: invoice),
-                  ],
-                ),
               ),
-              IconButton.filledTonal(
-                onPressed: onNext,
-                tooltip: 'Próxima fatura',
-                icon: const Icon(Icons.chevron_right_rounded),
-              ),
+              const SizedBox(height: 4),
+              _InvoiceStatusBadge(invoice: invoice),
             ],
           ),
-          const SizedBox(height: 22),
-          Text(
-            '${invoice.cardName} •••• ${invoice.cardLastDigits}',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.86),
-                ),
+        ),
+        IconButton.filledTonal(
+          onPressed: onNext,
+          tooltip: 'Próxima fatura',
+          icon: const Icon(Icons.chevron_right_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _InvoiceCreditCardVisual extends StatelessWidget {
+  const _InvoiceCreditCardVisual({
+    required this.card,
+    required this.invoice,
+  });
+
+  final CreditCardPreview card;
+  final CreditCardInvoicePreview invoice;
+
+  int get _availableLimitCents {
+    return (card.limitCents - invoice.amountCents).clamp(0, 1 << 31).toInt();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor = invoice.cardColor;
+    final gradientStart = _shiftColor(baseColor, lightnessDelta: 0.12);
+    final gradientEnd = _shiftColor(baseColor, lightnessDelta: -0.18);
+
+    return AspectRatio(
+      aspectRatio: 315 / 184,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [gradientStart, gradientEnd],
           ),
-          const SizedBox(height: 8),
-          Text(
-            CurrencyUtils.formatCents(invoice.amountCents),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _HeroPill(
-                icon: Icons.event_rounded,
-                label: 'Vence ${_formatDate(invoice.dueDate)}',
-              ),
-              _HeroPill(
-                icon: Icons.account_balance_wallet_rounded,
-                label: invoice.paymentAccountName ?? 'Conta padrão',
-              ),
-            ],
-          ),
-          if (onPay != null) ...[
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onPay,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                ),
-                icon: const Icon(Icons.check_circle_rounded),
-                label: const Text('Marcar fatura como paga'),
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: baseColor.withValues(alpha: 0.28),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
             ),
           ],
-        ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Stack(
+            children: [
+              Positioned(
+                left: -78,
+                bottom: -92,
+                child: _InvoiceCardGlow(size: 245, opacity: 0.11),
+              ),
+              Positioned(
+                right: -92,
+                top: -96,
+                child: _InvoiceCardGlow(size: 230, opacity: 0.10),
+              ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const padding = 22.0;
+                  final amountTop = constraints.maxHeight * 0.46;
+
+                  return Stack(
+                    children: [
+                      Positioned(
+                        left: padding,
+                        right: padding,
+                        top: padding,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    card.bankName?.isNotEmpty == true
+                                        ? card.bankName!
+                                        : card.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Colors.white70,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${card.name} •••• ${card.lastDigits}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          color: Colors.white,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    '${card.brandLabel} • Vence ${_formatDate(invoice.dueDate)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Colors.white70,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _InvoiceCardBrandMark(
+                              brand: card.brand,
+                              label: card.brandLabel,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        left: padding,
+                        right: padding,
+                        top: amountTop,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Fatura atual',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              CurrencyUtils.formatCents(invoice.amountCents),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 29,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        left: padding,
+                        right: padding,
+                        bottom: 20,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _InvoiceCardFooterDatum(
+                                label: 'Disponível',
+                                value: CurrencyUtils.formatCents(
+                                  _availableLimitCents,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _InvoiceCardFooterDatum(
+                              label: 'Limite total',
+                              value: CurrencyUtils.formatCents(card.limitCents),
+                              alignEnd: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _HeroPill extends StatelessWidget {
-  const _HeroPill({
-    required this.icon,
-    required this.label,
+class _PayInvoiceButton extends StatelessWidget {
+  const _PayInvoiceButton({
+    required this.amountCents,
+    required this.onPressed,
   });
 
-  final IconData icon;
-  final String label;
+  final int amountCents;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 17, color: Colors.white),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ],
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.check_circle_rounded),
+        label: Text(
+          'Marcar ${CurrencyUtils.formatCents(amountCents)} como pago',
         ),
       ),
     );
   }
+}
+
+class _InvoiceCardGlow extends StatelessWidget {
+  const _InvoiceCardGlow({
+    required this.size,
+    required this.opacity,
+  });
+
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size * 0.72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: opacity),
+      ),
+    );
+  }
+}
+
+class _InvoiceCardBrandMark extends StatelessWidget {
+  const _InvoiceCardBrandMark({
+    required this.brand,
+    required this.label,
+  });
+
+  final String brand;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedBrand = brand.toLowerCase();
+    final isMastercard = normalizedBrand == 'mastercard';
+    final isVisa = normalizedBrand == 'visa';
+
+    if (isMastercard) {
+      return SizedBox(
+        width: 46,
+        height: 30,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 4,
+              top: 3,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEB001B).withValues(alpha: 0.92),
+                  shape: BoxShape.circle,
+                ),
+                child: const SizedBox.square(dimension: 24),
+              ),
+            ),
+            Positioned(
+              right: 4,
+              top: 3,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF79E1B).withValues(alpha: 0.92),
+                  shape: BoxShape.circle,
+                ),
+                child: const SizedBox.square(dimension: 24),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Text(
+        isVisa ? 'VISA' : label.toUpperCase(),
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+      ),
+    );
+  }
+}
+
+class _InvoiceCardFooterDatum extends StatelessWidget {
+  const _InvoiceCardFooterDatum({
+    required this.label,
+    required this.value,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment:
+          alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white70,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+Color _shiftColor(Color color, {required double lightnessDelta}) {
+  final hsl = HSLColor.fromColor(color);
+  return hsl
+      .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+      .toColor();
 }
 
 class _InvoiceStatusBadge extends StatelessWidget {
@@ -858,16 +1263,17 @@ class _InvoiceStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final color = invoice.isPaid
         ? AppColors.success
         : invoice.status == 'closed'
             ? AppColors.warning
-            : Colors.white;
+            : colors.primary;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: invoice.isPaid || invoice.status == 'closed'
             ? color.withValues(alpha: 0.16)
-            : Colors.white.withValues(alpha: 0.12),
+            : colors.accentSoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
@@ -892,7 +1298,7 @@ class _LockedInvoiceNotice extends StatelessWidget {
     return const _InvoiceNotice(
       icon: Icons.lock_rounded,
       title: 'Fatura paga',
-      message: 'Compras desta fatura não podem ser editadas ou removidas.',
+      message: 'Registros desta fatura não podem ser editados ou removidos.',
     );
   }
 }
@@ -1015,7 +1421,7 @@ class _EmptyInvoicePurchases extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Nenhuma compra nesta fatura.',
+            'Nenhum registro nesta fatura.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
@@ -1028,12 +1434,14 @@ class _EmptyInvoicePurchases extends StatelessWidget {
 class _InvoicePurchaseTile extends StatelessWidget {
   const _InvoicePurchaseTile({
     required this.transaction,
+    required this.category,
     required this.isLocked,
     required this.onEdit,
     required this.onDelete,
   });
 
   final CreditCardInvoiceTransactionPreview transaction;
+  final CategoryModel? category;
   final bool isLocked;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -1048,15 +1456,19 @@ class _InvoicePurchaseTile extends StatelessWidget {
     final category = transaction.subcategoryName == null
         ? transaction.categoryName
         : '${transaction.categoryName} • ${transaction.subcategoryName}';
+    final categoryIcon = this.category?.icon ?? Icons.category_rounded;
+    final categoryColor = this.category?.color ?? AppColors.primary;
+    final displayDetail = transaction.isCredit
+        ? '${transaction.entryKindLabel} - $category'
+        : '$category$installment';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: colors.accentSoft,
-            foregroundColor: colors.primary,
-            child: const Icon(Icons.shopping_bag_outlined, size: 20),
+          _CategoryIconBadge(
+            icon: categoryIcon,
+            color: categoryColor,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1076,7 +1488,7 @@ class _InvoicePurchaseTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$category$installment • ${_formatDate(transaction.date)}',
+                      displayDetail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -1087,11 +1499,12 @@ class _InvoicePurchaseTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            CurrencyUtils.formatCents(transaction.amountCents),
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+          _InvoiceTransactionAmountDate(
+            amount: transaction.isCredit
+                ? '+ ${CurrencyUtils.formatCents(transaction.amountCents)}'
+                : CurrencyUtils.formatCents(transaction.amountCents),
+            date: _formatDate(transaction.date),
+            amountColor: transaction.isCredit ? colors.success : null,
           ),
           if (!isLocked)
             PopupMenuButton<_PurchaseAction>(
@@ -1127,7 +1540,355 @@ class _InvoicePurchaseTile extends StatelessWidget {
   }
 }
 
+class _InvoiceTransactionAmountDate extends StatelessWidget {
+  const _InvoiceTransactionAmountDate({
+    required this.amount,
+    required this.date,
+    this.amountColor,
+  });
+
+  final String amount;
+  final String date;
+  final Color? amountColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 118),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            amount,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: amountColor,
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            date,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 enum _PurchaseAction { edit, delete }
+
+enum _InvoiceEntryKind {
+  expense('expense', 'Gasto', Icons.shopping_bag_rounded),
+  refund('refund', 'Estorno', Icons.undo_rounded),
+  cashback('cashback', 'Cashback', Icons.savings_rounded);
+
+  const _InvoiceEntryKind(this.value, this.label, this.icon);
+
+  final String value;
+  final String label;
+  final IconData icon;
+
+  bool get isCredit => this != _InvoiceEntryKind.expense;
+
+  String get categoryLabel => isCredit ? 'Categoria de receita' : 'Categoria';
+  String get subcategoryLabel =>
+      isCredit ? 'Subcategoria de receita' : 'Subcategoria';
+  String get nameLabel => switch (this) {
+        _InvoiceEntryKind.expense => 'Nome do gasto',
+        _InvoiceEntryKind.refund => 'Nome do estorno',
+        _InvoiceEntryKind.cashback => 'Nome do cashback',
+      };
+}
+
+class _InvoiceEntryData {
+  const _InvoiceEntryData({
+    required this.kind,
+    required this.description,
+    required this.amountCents,
+    required this.categoryId,
+    required this.date,
+    this.subcategoryId,
+  });
+
+  final _InvoiceEntryKind kind;
+  final String description;
+  final int amountCents;
+  final int categoryId;
+  final int? subcategoryId;
+  final DateTime date;
+}
+
+class _InvoiceEntrySheet extends StatefulWidget {
+  const _InvoiceEntrySheet({
+    required this.invoice,
+    required this.expenseCategories,
+    required this.incomeCategories,
+    required this.subcategories,
+  });
+
+  final CreditCardInvoicePreview invoice;
+  final List<CategoryModel> expenseCategories;
+  final List<CategoryModel> incomeCategories;
+  final List<SubcategoryModel> subcategories;
+
+  @override
+  State<_InvoiceEntrySheet> createState() => _InvoiceEntrySheetState();
+}
+
+class _InvoiceEntrySheetState extends State<_InvoiceEntrySheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _descriptionController = TextEditingController();
+  final _amountController = TextEditingController();
+  _InvoiceEntryKind _kind = _InvoiceEntryKind.expense;
+  int? _selectedCategoryId;
+  int? _selectedSubcategoryId;
+  late DateTime _date;
+
+  @override
+  void initState() {
+    super.initState();
+    _date = DateTime.now();
+    _selectedCategoryId = _firstCategoryId(_kind);
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = _categoriesFor(_kind);
+    final subcategories = _selectedCategoryId == null
+        ? const <SubcategoryModel>[]
+        : _subcategoriesFor(_selectedCategoryId!);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Adicionar registro',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Fatura ${AppDateUtils.monthYearLabel(DateTime(widget.invoice.year, widget.invoice.month))}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final kind in _InvoiceEntryKind.values)
+                    ChoiceChip(
+                      selected: _kind == kind,
+                      avatar: Icon(kind.icon, size: 18),
+                      label: Text(kind.label),
+                      onSelected: (_) => _selectKind(kind),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: _kind.nameLabel,
+                  prefixIcon: const Icon(Icons.edit_note_rounded),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Informe o nome do registro.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Valor',
+                  prefixIcon: Icon(Icons.payments_rounded),
+                ),
+                validator: (value) {
+                  if (value == null || CurrencyUtils.parseToCents(value) <= 0) {
+                    return 'Informe um valor válido.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<int?>(
+                key: ValueKey('category-${_kind.value}'),
+                initialValue: _selectedCategoryId,
+                decoration: InputDecoration(
+                  labelText: _kind.categoryLabel,
+                  prefixIcon: const Icon(Icons.category_rounded),
+                ),
+                items: [
+                  for (final category in categories)
+                    DropdownMenuItem<int?>(
+                      value: category.id,
+                      child: Text(category.name),
+                    ),
+                ],
+                validator: (value) {
+                  if (value == null) {
+                    return _kind.isCredit
+                        ? 'Crie ou selecione uma categoria de receita.'
+                        : 'Crie ou selecione uma categoria de despesa.';
+                  }
+                  return null;
+                },
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategoryId = value;
+                    _selectedSubcategoryId = null;
+                  });
+                },
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<int?>(
+                key:
+                    ValueKey('subcategory-${_kind.value}-$_selectedCategoryId'),
+                initialValue: _selectedSubcategoryId,
+                decoration: InputDecoration(
+                  labelText: _kind.subcategoryLabel,
+                  prefixIcon: const Icon(Icons.label_rounded),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Sem subcategoria'),
+                  ),
+                  for (final subcategory in subcategories)
+                    DropdownMenuItem<int?>(
+                      value: subcategory.id,
+                      child: Text(subcategory.name),
+                    ),
+                ],
+                onChanged: (value) {
+                  setState(() => _selectedSubcategoryId = value);
+                },
+              ),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: _pickDate,
+                borderRadius: BorderRadius.circular(16),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data',
+                    prefixIcon: Icon(Icons.today_rounded),
+                  ),
+                  child: Text(_formatDate(_date)),
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _submit,
+                  icon: const Icon(Icons.save_rounded),
+                  label: const Text('Salvar registro'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectKind(_InvoiceEntryKind kind) {
+    setState(() {
+      _kind = kind;
+      _selectedCategoryId = _firstCategoryId(kind);
+      _selectedSubcategoryId = null;
+    });
+  }
+
+  int? _firstCategoryId(_InvoiceEntryKind kind) {
+    final categories = _categoriesFor(kind);
+    return categories.isEmpty ? null : categories.first.id;
+  }
+
+  List<CategoryModel> _categoriesFor(_InvoiceEntryKind kind) {
+    return kind.isCredit ? widget.incomeCategories : widget.expenseCategories;
+  }
+
+  List<SubcategoryModel> _subcategoriesFor(int categoryId) {
+    return widget.subcategories
+        .where((subcategory) => subcategory.categoryId == categoryId)
+        .toList();
+  }
+
+  Future<void> _pickDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(DateTime.now().year + 5),
+    );
+    if (selected != null) {
+      setState(() => _date = selected);
+    }
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate() || _selectedCategoryId == null) {
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _InvoiceEntryData(
+        kind: _kind,
+        description: _descriptionController.text.trim(),
+        amountCents: CurrencyUtils.parseToCents(_amountController.text),
+        categoryId: _selectedCategoryId!,
+        subcategoryId: _selectedSubcategoryId,
+        date: _date,
+      ),
+    );
+  }
+}
 
 class _PurchaseEditData {
   const _PurchaseEditData({
@@ -1217,7 +1978,7 @@ class _PurchaseEditSheetState extends State<_PurchaseEditSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Editar compra',
+                      'Editar ${widget.transaction.entryKindLabel.toLowerCase()}',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
@@ -1236,7 +1997,7 @@ class _PurchaseEditSheetState extends State<_PurchaseEditSheet> {
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Informe o nome da compra.';
+                    return 'Informe o nome do registro.';
                   }
                   return null;
                 },
@@ -1310,7 +2071,7 @@ class _PurchaseEditSheetState extends State<_PurchaseEditSheet> {
                 borderRadius: BorderRadius.circular(16),
                 child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Data da compra',
+                    labelText: 'Data',
                     prefixIcon: Icon(Icons.today_rounded),
                   ),
                   child: Text(_formatDate(_date)),

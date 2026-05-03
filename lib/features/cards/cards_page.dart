@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,19 +8,74 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../core/utils/date_utils.dart';
 import '../../data/models/account_preview.dart';
+import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../shared/widgets/section_card.dart';
 import 'cards_view_model.dart';
 import 'credit_card_invoice_page.dart';
 
-class CardsPage extends ConsumerWidget {
+class CardsPage extends ConsumerStatefulWidget {
   const CardsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CardsPage> createState() => _CardsPageState();
+}
+
+class _CardsPageState extends ConsumerState<CardsPage> {
+  late DateTime _visibleMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _visibleMonth = DateTime(now.year, now.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(cardsViewModelProvider);
-    final primaryCard = state.primaryCard;
+    final visibleInvoices = [
+      for (final card in state.cards)
+        state.invoiceForCardMonth(
+          card,
+          month: _visibleMonth.month,
+          year: _visibleMonth.year,
+        ),
+    ];
+    final invoicesByCardId = {
+      for (final invoice in visibleInvoices) invoice.cardId: invoice,
+    };
+    final expenseCategoriesById = {
+      for (final category in state.expenseCategories) category.id: category,
+    };
+    final categoriesById = {
+      for (final category in state.categories) category.id: category,
+    };
+    final visiblePurchases = [
+      for (final invoice in visibleInvoices)
+        for (final transaction in invoice.transactions)
+          _CardsInvoicePurchase(invoice: invoice, transaction: transaction),
+    ]..sort((a, b) => b.transaction.date.compareTo(a.transaction.date));
+    final totalInvoicesCents = visibleInvoices.fold<int>(
+      0,
+      (total, invoice) => total + invoice.amountCents,
+    );
+    final availableLimitCents = state.cards.fold<int>(
+      0,
+      (total, card) {
+        final invoiceAmount = invoicesByCardId[card.id]?.amountCents ?? 0;
+        return total +
+            (card.limitCents - invoiceAmount).clamp(0, 1 << 31).toInt();
+      },
+    );
+    final unpaidInvoicesCount = visibleInvoices
+        .where((invoice) => !invoice.isPaid && invoice.amountCents > 0)
+        .length;
+    final categorySpending = _buildCategorySpending(
+      visiblePurchases.map((purchase) => purchase.transaction),
+      expenseCategoriesById,
+    );
 
     ref.listen(cardsViewModelProvider.select((state) => state.errorMessage), (
       previous,
@@ -39,27 +96,44 @@ class CardsPage extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _CardsHeader(
-              monthLabel: AppDateUtils.monthYearLabel(DateTime.now()),
               onAdd: () => _openCardForm(context, ref),
+            ),
+            const SizedBox(height: 14),
+            _CardsMonthPager(
+              month: _visibleMonth,
+              onPrevious: () => _moveMonth(-1),
+              onNext: () => _moveMonth(1),
             ),
             if (state.isLoading) ...[
               const SizedBox(height: 14),
               const LinearProgressIndicator(minHeight: 3),
             ],
             const SizedBox(height: 20),
-            if (primaryCard == null)
+            if (state.cards.isEmpty)
               _EmptyCards(
                 hasAccounts: state.accounts.isNotEmpty,
                 onAdd: () => _openCardForm(context, ref),
               )
             else
-              _HeroCreditCard(
-                card: primaryCard,
-                onTap: () => _openCardInvoice(
+              _HeroCreditCardsList(
+                cards: state.cards,
+                invoicesByCardId: invoicesByCardId,
+                onTapCard: (card) => _openCardInvoice(
                   context,
-                  state.invoiceForCard(primaryCard),
+                  invoicesByCardId[card.id] ?? state.invoiceForCard(card),
                 ),
-                onPay: () => _confirmPayInvoice(context, ref, primaryCard),
+                onEditCard: (card) => _openCardForm(
+                  context,
+                  ref,
+                  card: card,
+                ),
+                onPayCard: (card) => _confirmPayInvoice(
+                  context,
+                  ref,
+                  card,
+                  invoice: invoicesByCardId[card.id],
+                ),
+                onDeleteCard: (card) => _confirmDeleteCard(context, ref, card),
               ),
             const SizedBox(height: 18),
             Wrap(
@@ -68,49 +142,42 @@ class CardsPage extends ConsumerWidget {
               children: [
                 _CardsMetric(
                   title: 'Total em faturas',
-                  value: CurrencyUtils.formatCents(state.totalInvoicesCents),
+                  value: CurrencyUtils.formatCents(totalInvoicesCents),
                   icon: Icons.receipt_long_rounded,
                 ),
                 _CardsMetric(
                   title: 'Limite disponível',
-                  value: CurrencyUtils.formatCents(state.availableLimitCents),
+                  value: CurrencyUtils.formatCents(availableLimitCents),
                   icon: Icons.account_balance_wallet_rounded,
                 ),
                 _CardsMetric(
                   title: 'Próximos vencimentos',
-                  value:
-                      '${state.invoices.where((invoice) => !invoice.isPaid).length} faturas',
+                  value: '$unpaidInvoicesCount faturas',
                   icon: Icons.calendar_month_rounded,
                 ),
               ],
             ),
             const SizedBox(height: 18),
             SectionCard(
-              title: 'Meus cartões',
-              trailing: TextButton.icon(
-                onPressed: () => _openCardForm(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Adicionar'),
+              title: 'Gastos por categoria',
+              child: _CardsCategorySpendingChart(spending: categorySpending),
+            ),
+            const SizedBox(height: 14),
+            SectionCard(
+              title: 'Registros da fatura',
+              trailing: Text(
+                '${visiblePurchases.length} itens',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-              child: state.cards.isEmpty
-                  ? const _CardsListEmpty()
+              child: visiblePurchases.isEmpty
+                  ? const _EmptyCardsPurchases()
                   : Column(
                       children: [
-                        for (final card in state.cards)
-                          _CreditCardTile(
-                            card: card,
-                            onTap: () => _openCardInvoice(
-                              context,
-                              state.invoiceForCard(card),
-                            ),
-                            onEdit: () => _openCardForm(
-                              context,
-                              ref,
-                              card: card,
-                            ),
-                            onPay: () => _confirmPayInvoice(context, ref, card),
-                            onDelete: () =>
-                                _confirmDeleteCard(context, ref, card),
+                        for (final purchase in visiblePurchases)
+                          _CardsInvoicePurchaseTile(
+                            purchase: purchase,
+                            category:
+                                categoriesById[purchase.transaction.categoryId],
                           ),
                       ],
                     ),
@@ -119,6 +186,93 @@ class CardsPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _moveMonth(int delta) {
+    setState(() {
+      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
+    });
+  }
+
+  List<_CardsCategorySpending> _buildCategorySpending(
+    Iterable<CreditCardInvoiceTransactionPreview> transactions,
+    Map<int, CategoryModel> categoriesById,
+  ) {
+    final totalsByCategory = <int, int>{};
+    final countsByCategory = <int, int>{};
+
+    for (final transaction in transactions) {
+      if (!transaction.isExpense) {
+        continue;
+      }
+      totalsByCategory.update(
+        transaction.categoryId,
+        (total) => total + transaction.amountCents,
+        ifAbsent: () => transaction.amountCents,
+      );
+      countsByCategory.update(
+        transaction.categoryId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+
+    final spending = [
+      for (final entry in totalsByCategory.entries)
+        _CardsCategorySpending(
+          categoryId: entry.key,
+          name: categoriesById[entry.key]?.name ?? 'Categoria',
+          amountCents: entry.value,
+          transactionCount: countsByCategory[entry.key] ?? 0,
+          icon: categoriesById[entry.key]?.icon ?? Icons.category_rounded,
+          color: categoriesById[entry.key]?.color,
+        ),
+    ]..sort((a, b) => b.amountCents.compareTo(a.amountCents));
+
+    final usedColors = <int>{};
+    return [
+      for (var index = 0; index < spending.length; index++)
+        spending[index].copyWith(
+          color: _chartColorFor(
+            categoryId: spending[index].categoryId,
+            index: index,
+            preferredColor: spending[index].color,
+            usedColors: usedColors,
+          ),
+        ),
+    ];
+  }
+
+  Color _chartColorFor({
+    required int categoryId,
+    required int index,
+    required Color? preferredColor,
+    required Set<int> usedColors,
+  }) {
+    if (preferredColor != null && usedColors.add(preferredColor.toARGB32())) {
+      return preferredColor;
+    }
+
+    const colors = [
+      AppColors.primary,
+      Color(0xFF2F80ED),
+      Color(0xFFF59E0B),
+      Color(0xFF7C3AED),
+      Color(0xFFEC4899),
+      Color(0xFF19A974),
+      Color(0xFFE11D48),
+      Color(0xFF0891B2),
+      Color(0xFF84CC16),
+      Color(0xFFEA580C),
+    ];
+    for (var offset = 0; offset < colors.length; offset++) {
+      final color = colors[(index + offset + categoryId.abs()) % colors.length];
+      if (usedColors.add(color.toARGB32())) {
+        return color;
+      }
+    }
+
+    return colors[index % colors.length];
   }
 
   Future<void> _openCardInvoice(
@@ -241,11 +395,26 @@ class CardsPage extends ConsumerWidget {
   Future<void> _confirmPayInvoice(
     BuildContext context,
     WidgetRef ref,
-    CreditCardPreview card,
-  ) async {
-    if (card.invoiceCents <= 0) {
+    CreditCardPreview card, {
+    CreditCardInvoicePreview? invoice,
+  }) async {
+    final targetInvoice =
+        invoice ?? ref.read(cardsViewModelProvider).invoiceForCard(card);
+    if (targetInvoice.amountCents <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Este cartão não tem fatura em aberto.')),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final isCurrentMonth =
+        targetInvoice.month == now.month && targetInvoice.year == now.year;
+    if (!isCurrentMonth && targetInvoice.id <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Esta fatura ainda não pode ser marcada como paga.'),
+        ),
       );
       return;
     }
@@ -256,7 +425,7 @@ class CardsPage extends ConsumerWidget {
         return AlertDialog(
           title: const Text('Pagar fatura?'),
           content: Text(
-            'Vamos descontar ${CurrencyUtils.formatCents(card.invoiceCents)} da conta ${card.defaultPaymentAccountName ?? 'padrão'}.',
+            'Vamos descontar ${CurrencyUtils.formatCents(targetInvoice.amountCents)} da conta ${targetInvoice.paymentAccountName ?? card.defaultPaymentAccountName ?? 'padrão'}.',
           ),
           actions: [
             TextButton(
@@ -276,7 +445,11 @@ class CardsPage extends ConsumerWidget {
       return;
     }
 
-    await ref.read(cardsViewModelProvider.notifier).payCurrentInvoice(card);
+    if (targetInvoice.id > 0) {
+      await ref.read(cardsViewModelProvider.notifier).payInvoice(targetInvoice);
+    } else {
+      await ref.read(cardsViewModelProvider.notifier).payCurrentInvoice(card);
+    }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fatura paga.')),
@@ -324,11 +497,9 @@ class CardsPage extends ConsumerWidget {
 
 class _CardsHeader extends StatelessWidget {
   const _CardsHeader({
-    required this.monthLabel,
     required this.onAdd,
   });
 
-  final String monthLabel;
   final VoidCallback onAdd;
 
   @override
@@ -341,17 +512,62 @@ class _CardsHeader extends StatelessWidget {
             children: [
               Text('Cartões',
                   style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 4),
-              Text(monthLabel, style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
         ),
-        IconButton.filled(
+        FilledButton.icon(
           onPressed: onAdd,
-          tooltip: 'Adicionar cartão',
           icon: const Icon(Icons.add_card_rounded),
+          label: const Text('Adicionar'),
         ),
       ],
+    );
+  }
+}
+
+class _CardsMonthPager extends StatelessWidget {
+  const _CardsMonthPager({
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final DateTime month;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onPrevious,
+            tooltip: 'Mês anterior',
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Text(
+              AppDateUtils.monthYearLabel(month),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            onPressed: onNext,
+            tooltip: 'Próximo mês',
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -401,94 +617,118 @@ class _EmptyCards extends StatelessWidget {
   }
 }
 
-class _HeroCreditCard extends StatelessWidget {
-  const _HeroCreditCard({
-    required this.card,
-    required this.onTap,
-    required this.onPay,
+class _HeroCreditCardsList extends StatelessWidget {
+  const _HeroCreditCardsList({
+    required this.cards,
+    required this.invoicesByCardId,
+    required this.onTapCard,
+    required this.onEditCard,
+    required this.onPayCard,
+    required this.onDeleteCard,
   });
 
-  final CreditCardPreview card;
-  final VoidCallback onTap;
-  final VoidCallback onPay;
+  final List<CreditCardPreview> cards;
+  final Map<int, CreditCardInvoicePreview> invoicesByCardId;
+  final void Function(CreditCardPreview card) onTapCard;
+  final void Function(CreditCardPreview card) onEditCard;
+  final void Function(CreditCardPreview card) onPayCard;
+  final void Function(CreditCardPreview card) onDeleteCard;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _PhysicalCreditCard(
-          card: card,
-          onTap: onTap,
-          isHero: true,
-        ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final colors = context.colors;
-            final paymentLabel = Row(
-              children: [
-                Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: colors.textSecondary,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Pagamento: ${card.defaultPaymentAccountName ?? 'conta padrão'}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewportWidth = constraints.maxWidth;
+        final isTablet = viewportWidth >= 680;
+        final cardWidth = isTablet
+            ? ((viewportWidth - 14) / 2).clamp(300.0, viewportWidth)
+            : viewportWidth;
+
+        return Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final card in cards)
+              SizedBox(
+                width: cardWidth.toDouble(),
+                child: _PhysicalCreditCard(
+                  card: card,
+                  invoiceCents: invoicesByCardId[card.id]?.amountCents,
+                  onTap: () => onTapCard(card),
+                  isHero: true,
+                  menu: _CardActionsMenu(
+                    onEdit: () => onEditCard(card),
+                    onPay: () => onPayCard(card),
+                    onDelete: () => onDeleteCard(card),
                   ),
                 ),
-              ],
-            );
-            final payButton = FilledButton.icon(
-              onPressed: card.invoiceCents > 0 ? onPay : null,
-              icon: const Icon(Icons.check_circle_rounded),
-              label: const Text('Pagar fatura'),
-            );
-
-            if (constraints.maxWidth < 340) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  paymentLabel,
-                  const SizedBox(height: 12),
-                  payButton,
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                Expanded(child: paymentLabel),
-                const SizedBox(width: 12),
-                payButton,
-              ],
-            );
-          },
-        ),
-      ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _PhysicalCreditCard extends StatelessWidget {
+class _PhysicalCreditCard extends StatefulWidget {
   const _PhysicalCreditCard({
     required this.card,
     required this.onTap,
+    this.invoiceCents,
     this.menu,
     this.isHero = false,
   });
 
   final CreditCardPreview card;
   final VoidCallback onTap;
+  final int? invoiceCents;
   final Widget? menu;
   final bool isHero;
 
+  @override
+  State<_PhysicalCreditCard> createState() => _PhysicalCreditCardState();
+}
+
+class _PhysicalCreditCardState extends State<_PhysicalCreditCard> {
+  static const _aspectRatio = 315 / 184;
+
+  Offset _tilt = Offset.zero;
+  bool _isHolding = false;
+
+  CreditCardPreview get card => widget.card;
+  bool get isHero => widget.isHero;
+  int get _invoiceCents => widget.invoiceCents ?? card.invoiceCents;
+
   int get _availableLimitCents {
-    return (card.limitCents - card.invoiceCents).clamp(0, 1 << 31).toInt();
+    return (card.limitCents - _invoiceCents).clamp(0, 1 << 31).toInt();
+  }
+
+  void _updateTilt(Offset position, Size size) {
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final normalizedDx = ((position.dx / size.width) - 0.5) * 2;
+    final normalizedDy = ((position.dy / size.height) - 0.5) * 2;
+
+    setState(() {
+      _isHolding = true;
+      _tilt = Offset(
+        normalizedDx.clamp(-1.0, 1.0).toDouble(),
+        normalizedDy.clamp(-1.0, 1.0).toDouble(),
+      );
+    });
+  }
+
+  void _resetTilt() {
+    if (!_isHolding && _tilt == Offset.zero) {
+      return;
+    }
+
+    setState(() {
+      _isHolding = false;
+      _tilt = Offset.zero;
+    });
   }
 
   @override
@@ -497,12 +737,12 @@ class _PhysicalCreditCard extends StatelessWidget {
     final gradientStart = _shiftColor(baseColor, lightnessDelta: 0.12);
     final gradientEnd = _shiftColor(baseColor, lightnessDelta: -0.18);
 
-    return AspectRatio(
-      aspectRatio: 315 / 184,
+    final cardBody = AspectRatio(
+      aspectRatio: _aspectRatio,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: widget.onTap,
           borderRadius: BorderRadius.circular(isHero ? 28 : 24),
           child: Ink(
             decoration: BoxDecoration(
@@ -619,9 +859,9 @@ class _PhysicalCreditCard extends StatelessWidget {
                                   brand: card.brand,
                                   label: card.brandLabel,
                                 ),
-                                if (menu != null) ...[
+                                if (widget.menu != null) ...[
                                   const SizedBox(width: 2),
-                                  menu!,
+                                  widget.menu!,
                                 ],
                               ],
                             ),
@@ -640,7 +880,7 @@ class _PhysicalCreditCard extends StatelessWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        'Limite atual',
+                                        'Fatura atual',
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall
@@ -652,7 +892,7 @@ class _PhysicalCreditCard extends StatelessWidget {
                                       const SizedBox(height: 2),
                                       Text(
                                         CurrencyUtils.formatCents(
-                                          card.limitCents,
+                                          _invoiceCents,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -667,14 +907,6 @@ class _PhysicalCreditCard extends StatelessWidget {
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                const _CardChip(),
-                                const SizedBox(width: 10),
-                                Icon(
-                                  Icons.contactless_rounded,
-                                  color: Colors.white.withValues(alpha: 0.88),
-                                  size: isHero ? 28 : 24,
                                 ),
                               ],
                             ),
@@ -695,9 +927,9 @@ class _PhysicalCreditCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 10),
                                 _CardFooterDatum(
-                                  label: 'Fatura',
+                                  label: 'Limite total',
                                   value: CurrencyUtils.formatCents(
-                                    card.invoiceCents,
+                                    card.limitCents,
                                   ),
                                   alignEnd: true,
                                 ),
@@ -714,6 +946,46 @@ class _PhysicalCreditCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth;
+        final cardHeight = cardWidth / _aspectRatio;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onLongPressStart: (details) {
+            _updateTilt(details.localPosition, Size(cardWidth, cardHeight));
+          },
+          onLongPressMoveUpdate: (details) {
+            _updateTilt(details.localPosition, Size(cardWidth, cardHeight));
+          },
+          onLongPressEnd: (_) => _resetTilt(),
+          onLongPressCancel: _resetTilt,
+          child: TweenAnimationBuilder<Offset>(
+            tween: Tween<Offset>(end: _tilt),
+            duration: Duration(milliseconds: _isHolding ? 70 : 240),
+            curve: Curves.easeOutCubic,
+            builder: (context, tilt, child) {
+              final transform = Matrix4.identity()
+                ..setEntry(3, 2, 0.0012)
+                ..rotateX(-tilt.dy * 0.12)
+                ..rotateY(tilt.dx * 0.16);
+
+              return Transform(
+                alignment: Alignment.center,
+                transform: transform,
+                child: Transform.scale(
+                  scale: _isHolding ? 1.012 : 1,
+                  child: child,
+                ),
+              );
+            },
+            child: cardBody,
+          ),
+        );
+      },
     );
   }
 }
@@ -735,51 +1007,6 @@ class _CardGlow extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.black.withValues(alpha: opacity),
-      ),
-    );
-  }
-}
-
-class _CardChip extends StatelessWidget {
-  const _CardChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 30,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8E0CA),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 13,
-            top: 0,
-            bottom: 0,
-            child: Container(width: 1, color: Colors.black12),
-          ),
-          Positioned(
-            right: 13,
-            top: 0,
-            bottom: 0,
-            child: Container(width: 1, color: Colors.black12),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 10,
-            child: Container(height: 1, color: Colors.black12),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 10,
-            child: Container(height: 1, color: Colors.black12),
-          ),
-        ],
       ),
     );
   }
@@ -988,80 +1215,490 @@ class _CardsMetric extends StatelessWidget {
   }
 }
 
-class _CardsListEmpty extends StatelessWidget {
-  const _CardsListEmpty();
+class _CardsInvoicePurchase {
+  const _CardsInvoicePurchase({
+    required this.invoice,
+    required this.transaction,
+  });
+
+  final CreditCardInvoicePreview invoice;
+  final CreditCardInvoiceTransactionPreview transaction;
+}
+
+class _CardsCategorySpending {
+  const _CardsCategorySpending({
+    required this.categoryId,
+    required this.name,
+    required this.amountCents,
+    required this.transactionCount,
+    required this.icon,
+    this.color,
+  });
+
+  final int categoryId;
+  final String name;
+  final int amountCents;
+  final int transactionCount;
+  final IconData icon;
+  final Color? color;
+
+  _CardsCategorySpending copyWith({Color? color}) {
+    return _CardsCategorySpending(
+      categoryId: categoryId,
+      name: name,
+      amountCents: amountCents,
+      transactionCount: transactionCount,
+      icon: icon,
+      color: color ?? this.color,
+    );
+  }
+}
+
+class _CardsCategorySpendingChart extends StatelessWidget {
+  const _CardsCategorySpendingChart({
+    required this.spending,
+  });
+
+  final List<_CardsCategorySpending> spending;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final chartTotal = spending.fold<int>(
+      0,
+      (total, item) => total + item.amountCents,
+    );
+    final transactionCount = spending.fold<int>(
+      0,
+      (total, item) => total + item.transactionCount,
+    );
+
+    if (spending.isEmpty || chartTotal <= 0) {
+      return const _EmptyCardsCategoryChart();
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 178,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size.square(164),
+                painter: _CardsCategoryDonutPainter(
+                  spending: spending,
+                  totalCents: chartTotal,
+                  baseColor: colors.border,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$transactionCount compras',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    CurrencyUtils.formatCents(chartTotal),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Column(
+          children: [
+            for (final item in spending)
+              _CardsCategorySpendingRow(
+                item: item,
+                totalCents: chartTotal,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyCardsCategoryChart extends StatelessWidget {
+  const _EmptyCardsCategoryChart();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Text(
-        'Adicione seu primeiro cartão para acompanhar limite, fatura e vencimento.',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium,
+      child: Column(
+        children: [
+          Icon(
+            Icons.pie_chart_outline_rounded,
+            color: colors.textSecondary,
+            size: 42,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'As categorias aparecerão quando houver compras neste mês.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
       ),
     );
   }
 }
 
-class _CreditCardTile extends StatelessWidget {
-  const _CreditCardTile({
-    required this.card,
-    required this.onTap,
+class _CardsCategorySpendingRow extends StatelessWidget {
+  const _CardsCategorySpendingRow({
+    required this.item,
+    required this.totalCents,
+  });
+
+  final _CardsCategorySpending item;
+  final int totalCents;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final percent = totalCents == 0 ? 0 : item.amountCents / totalCents;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          _CardsCategoryIconBadge(
+            icon: item.icon,
+            color: item.color ?? AppColors.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.transactionCount == 1
+                      ? '1 compra'
+                      : '${item.transactionCount} compras',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            CurrencyUtils.formatCents(item.amountCents),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 42,
+            child: Text(
+              '${(percent * 100).round()}%',
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardsCategoryIconBadge extends StatelessWidget {
+  const _CardsCategoryIconBadge({
+    required this.icon,
+    required this.color,
+  });
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        icon,
+        color: color,
+        size: 20,
+      ),
+    );
+  }
+}
+
+class _CardsCategoryDonutPainter extends CustomPainter {
+  const _CardsCategoryDonutPainter({
+    required this.spending,
+    required this.totalCents,
+    required this.baseColor,
+  });
+
+  final List<_CardsCategorySpending> spending;
+  final int totalCents;
+  final Color baseColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeWidth = size.shortestSide * 0.14;
+    final rect = Offset(strokeWidth / 2, strokeWidth / 2) &
+        Size(
+          size.width - strokeWidth,
+          size.height - strokeWidth,
+        );
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt
+      ..color = baseColor;
+    final segmentPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    canvas.drawArc(rect, 0, math.pi * 2, false, basePaint);
+
+    var startAngle = -math.pi / 2;
+    final gapAngle = spending.length > 1 ? 0.018 : 0.0;
+    for (final item in spending) {
+      final sweepAngle = (item.amountCents / totalCents) * math.pi * 2;
+      if (sweepAngle <= 0) {
+        continue;
+      }
+      segmentPaint.color = item.color ?? AppColors.primary;
+      canvas.drawArc(
+        rect,
+        startAngle + gapAngle / 2,
+        math.max(0, sweepAngle - gapAngle),
+        false,
+        segmentPaint,
+      );
+      startAngle += sweepAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardsCategoryDonutPainter oldDelegate) {
+    return oldDelegate.spending != spending ||
+        oldDelegate.totalCents != totalCents ||
+        oldDelegate.baseColor != baseColor;
+  }
+}
+
+class _EmptyCardsPurchases extends StatelessWidget {
+  const _EmptyCardsPurchases();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Column(
+        children: [
+          Icon(
+            Icons.receipt_long_outlined,
+            color: colors.textSecondary,
+            size: 42,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Nenhum registro em cartões neste mês.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardsInvoicePurchaseTile extends StatelessWidget {
+  const _CardsInvoicePurchaseTile({
+    required this.purchase,
+    required this.category,
+  });
+
+  final _CardsInvoicePurchase purchase;
+  final CategoryModel? category;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final transaction = purchase.transaction;
+    final installment = transaction.installmentNumber == null ||
+            transaction.totalInstallments == null
+        ? ''
+        : ' • ${transaction.installmentNumber}/${transaction.totalInstallments}';
+    final categoryLabel = transaction.subcategoryName == null
+        ? transaction.categoryName
+        : '${transaction.categoryName} • ${transaction.subcategoryName}';
+    final categoryIcon = category?.icon ?? Icons.category_rounded;
+    final categoryColor = category?.color ?? AppColors.primary;
+    final displayDetail = transaction.isCredit
+        ? '${transaction.entryKindLabel} - $categoryLabel - ${purchase.invoice.cardName}'
+        : '$categoryLabel$installment - ${purchase.invoice.cardName}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          _CardsCategoryIconBadge(icon: categoryIcon, color: categoryColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  displayDetail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _TransactionAmountDate(
+            amount: transaction.isCredit
+                ? '+ ${CurrencyUtils.formatCents(transaction.amountCents)}'
+                : CurrencyUtils.formatCents(transaction.amountCents),
+            date: _formatDate(transaction.date),
+            amountColor: transaction.isCredit ? colors.success : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransactionAmountDate extends StatelessWidget {
+  const _TransactionAmountDate({
+    required this.amount,
+    required this.date,
+    this.amountColor,
+  });
+
+  final String amount;
+  final String date;
+  final Color? amountColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 118),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            amount,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: amountColor,
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            date,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardActionsMenu extends StatelessWidget {
+  const _CardActionsMenu({
     required this.onEdit,
     required this.onPay,
     required this.onDelete,
   });
 
-  final CreditCardPreview card;
-  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onPay;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: _PhysicalCreditCard(
-        card: card,
-        onTap: onTap,
-        menu: PopupMenuButton<_CardAction>(
-          tooltip: 'Ações do cartão',
-          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-          onSelected: (action) {
-            switch (action) {
-              case _CardAction.edit:
-                onEdit();
-              case _CardAction.pay:
-                onPay();
-              case _CardAction.delete:
-                onDelete();
-            }
-          },
-          itemBuilder: (context) {
-            return [
-              const PopupMenuItem(
-                value: _CardAction.edit,
-                child: Text('Editar'),
-              ),
-              const PopupMenuItem(
-                value: _CardAction.pay,
-                child: Text('Pagar fatura'),
-              ),
-              const PopupMenuItem(
-                value: _CardAction.delete,
-                child: Text('Remover'),
-              ),
-            ];
-          },
-        ),
-      ),
+    return PopupMenuButton<_CardAction>(
+      tooltip: 'Ações do cartão',
+      icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+      onSelected: (action) {
+        switch (action) {
+          case _CardAction.edit:
+            onEdit();
+          case _CardAction.pay:
+            onPay();
+          case _CardAction.delete:
+            onDelete();
+        }
+      },
+      itemBuilder: (context) {
+        return const [
+          PopupMenuItem(
+            value: _CardAction.edit,
+            child: Text('Editar'),
+          ),
+          PopupMenuItem(
+            value: _CardAction.pay,
+            child: Text('Pagar fatura'),
+          ),
+          PopupMenuItem(
+            value: _CardAction.delete,
+            child: Text('Remover'),
+          ),
+        ];
+      },
     );
   }
 }
 
 enum _CardAction { edit, pay, delete }
+
+String _formatDate(DateTime date) {
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
 
 class _CreditCardFormSheet extends StatefulWidget {
   const _CreditCardFormSheet({

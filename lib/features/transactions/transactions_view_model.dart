@@ -762,10 +762,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
 
       if (entry.isTransfer) {
         transferCents += entry.amountCents;
+      } else if (entry.isCreditCard) {
+        cardExpenseCents +=
+            entry.isIncome ? -entry.amountCents : entry.amountCents;
       } else if (entry.isIncome) {
         incomeCents += entry.amountCents;
-      } else if (entry.isCreditCard) {
-        cardExpenseCents += entry.amountCents;
       } else {
         accountExpenseCents += entry.amountCents;
       }
@@ -886,6 +887,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       'single' => 'Única',
       'installment' => 'Parcelada',
       'fixed_monthly' => 'Fixa mensal',
+      'refund' => 'Estorno',
+      'cashback' => 'Cashback',
       _ => null,
     };
   }

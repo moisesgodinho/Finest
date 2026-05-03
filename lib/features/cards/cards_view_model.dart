@@ -8,6 +8,7 @@ import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/account_preview.dart';
 import '../../data/models/create_credit_card_request.dart';
+import '../../data/models/create_transaction_request.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
@@ -102,6 +103,10 @@ class CardsState {
 
   List<CategoryModel> get expenseCategories {
     return categories.where((category) => category.type == 'expense').toList();
+  }
+
+  List<CategoryModel> get incomeCategories {
+    return categories.where((category) => category.type == 'income').toList();
   }
 
   List<SubcategoryModel> subcategoriesFor(int categoryId) {
@@ -333,6 +338,56 @@ class CardsViewModel extends StateNotifier<CardsState> {
     }
   }
 
+  Future<void> addInvoiceEntry({
+    required CreditCardPreview card,
+    required CreditCardInvoicePreview invoice,
+    required String entryKind,
+    required String description,
+    required int amountCents,
+    required int categoryId,
+    required int? subcategoryId,
+    required DateTime date,
+  }) async {
+    if (invoice.isPaid) {
+      throw StateError('Esta fatura já foi paga.');
+    }
+
+    final accountId = invoice.paymentAccountId ?? card.defaultPaymentAccountId;
+    if (accountId == null) {
+      throw StateError('Defina uma conta padrão para o cartão.');
+    }
+
+    final userId = _requireUserId();
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    try {
+      await _transactionRepository.createTransaction(
+        CreateTransactionRequest(
+          userId: userId,
+          accountId: accountId,
+          creditCardId: card.id,
+          categoryId: categoryId,
+          subcategoryId: subcategoryId,
+          type: entryKind == 'expense' ? 'expense' : 'income',
+          description: description,
+          amountCents: amountCents,
+          date: date,
+          paymentMethod: 'credit_card',
+          invoiceMonth: invoice.month,
+          invoiceYear: invoice.year,
+          expenseKind: entryKind == 'expense' ? 'single' : entryKind,
+          isPaid: true,
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
   Future<void> updateInvoiceTransaction({
     required CreditCardInvoicePreview invoice,
     required CreditCardInvoiceTransactionPreview transaction,
@@ -524,12 +579,15 @@ class CardsViewModel extends StateNotifier<CardsState> {
 
       totals.update(
         creditCardId,
-        (total) => total + transaction.amount,
-        ifAbsent: () => transaction.amount,
+        (total) => total + _invoiceAmountDelta(transaction),
+        ifAbsent: () => _invoiceAmountDelta(transaction),
       );
     }
 
-    return totals;
+    return {
+      for (final entry in totals.entries)
+        entry.key: entry.value.clamp(0, 1 << 31).toInt(),
+    };
   }
 
   AccountPreview _mapAccount(Account account) {
@@ -589,10 +647,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
     );
     final transactionTotal = transactions.fold<int>(
       0,
-      (total, transaction) => total + transaction.amount,
+      (total, transaction) => total + _invoiceAmountDelta(transaction),
     );
-    final invoiceAmount =
-        transactions.isEmpty ? invoice.amount : transactionTotal;
+    final invoiceAmount = transactions.isEmpty
+        ? invoice.amount
+        : transactionTotal.clamp(0, 1 << 31).toInt();
     final effectiveStatus = invoice.status == 'open' &&
             _isInvoiceClosed(
               month: invoice.month,
@@ -715,10 +774,13 @@ class CardsViewModel extends StateNotifier<CardsState> {
       month: month,
       year: year,
     );
-    final amount = transactions.fold<int>(
-      0,
-      (total, transaction) => total + transaction.amount,
-    );
+    final amount = transactions
+        .fold<int>(
+          0,
+          (total, transaction) => total + _invoiceAmountDelta(transaction),
+        )
+        .clamp(0, 1 << 31)
+        .toInt();
     final status = _isInvoiceClosed(
       month: month,
       year: year,
@@ -782,13 +844,21 @@ class CardsViewModel extends StateNotifier<CardsState> {
       date: transaction.date,
       categoryId: transaction.categoryId,
       categoryName: categoriesById[transaction.categoryId]?.name ?? 'Categoria',
+      type: transaction.type,
       subcategoryId: transaction.subcategoryId,
       subcategoryName: transaction.subcategoryId == null
           ? null
           : subcategoriesById[transaction.subcategoryId]?.name,
+      entryKind: transaction.expenseKind,
       installmentNumber: transaction.installmentNumber,
       totalInstallments: transaction.totalInstallments,
     );
+  }
+
+  int _invoiceAmountDelta(FinanceTransaction transaction) {
+    return transaction.type == 'income'
+        ? -transaction.amount
+        : transaction.amount;
   }
 
   String _invoiceKey({

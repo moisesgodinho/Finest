@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/routing/app_router.dart';
@@ -20,6 +21,21 @@ class FinancePetApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themePreference.themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        final isLight = Theme.of(context).brightness == Brightness.light;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness:
+                isLight ? Brightness.dark : Brightness.light,
+            statusBarBrightness: isLight ? Brightness.light : Brightness.dark,
+            systemNavigationBarColor: Theme.of(context).colorScheme.surface,
+            systemNavigationBarIconBrightness:
+                isLight ? Brightness.dark : Brightness.light,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

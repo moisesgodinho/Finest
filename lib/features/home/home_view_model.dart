@@ -261,7 +261,11 @@ class HomeViewModel extends StateNotifier<HomeState> {
     }).toList();
 
     final incomeCents = monthTransactions
-        .where((transaction) => transaction.type == 'income')
+        .where(
+          (transaction) =>
+              transaction.type == 'income' &&
+              transaction.paymentMethod != 'credit_card',
+        )
         .fold<int>(0, (total, transaction) => total + transaction.amount);
     final expenseCents = monthTransactions
         .where((transaction) => transaction.type == 'expense')
@@ -400,7 +404,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
         continue;
       }
 
-      final transactionTotal = _transactions
+      final invoiceTransactions = _transactions
           .where(
             (transaction) =>
                 transaction.paymentMethod == 'credit_card' &&
@@ -410,10 +414,14 @@ class HomeViewModel extends StateNotifier<HomeState> {
                 (transaction.invoiceYear ?? transaction.date.year) ==
                     month.year,
           )
-          .fold<int>(0, (total, transaction) => total + transaction.amount);
+          .toList();
+      final transactionTotal = invoiceTransactions.fold<int>(
+        0,
+        (total, transaction) => total + _invoiceAmountDelta(transaction),
+      );
 
-      totals[card.id] = transactionTotal > 0
-          ? transactionTotal
+      totals[card.id] = invoiceTransactions.isNotEmpty
+          ? transactionTotal.clamp(0, 1 << 31).toInt()
           : invoice?.amount ?? card.currentInvoice;
     }
 
@@ -443,6 +451,12 @@ class HomeViewModel extends StateNotifier<HomeState> {
       }
       return !paidAt.isBefore(firstDay) && !paidAt.isAfter(lastDay);
     }).fold<int>(0, (total, invoice) => total + invoice.amount);
+  }
+
+  int _invoiceAmountDelta(FinanceTransaction transaction) {
+    return transaction.type == 'income'
+        ? -transaction.amount
+        : transaction.amount;
   }
 
   DateTime _referenceDate(FinanceTransaction transaction) {
@@ -502,12 +516,13 @@ class HomeViewModel extends StateNotifier<HomeState> {
         TransactionPreview(
           title: transaction.description,
           subtitle:
-              '${categoryMap[transaction.categoryId]?.name ?? 'Sem categoria'} • ${_dateLabel(transaction.date)}',
+              categoryMap[transaction.categoryId]?.name ?? 'Sem categoria',
           amountCents: transaction.amount,
           icon: categoryMap[transaction.categoryId]?.icon ??
               Icons.category_rounded,
           iconColor:
               categoryMap[transaction.categoryId]?.color ?? AppColors.primary,
+          dateLabel: _dateLabel(transaction.date),
           isIncome: transaction.type == 'income',
           isPaid: transaction.isPaid,
         ),

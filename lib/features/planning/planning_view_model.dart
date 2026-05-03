@@ -313,7 +313,11 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
     }).toList();
 
     final currentIncomeCents = monthTransactions
-        .where((transaction) => transaction.type == 'income')
+        .where(
+          (transaction) =>
+              transaction.type == 'income' &&
+              transaction.paymentMethod != 'credit_card',
+        )
         .fold<int>(0, (total, transaction) => total + transaction.amount);
     final currentExpenseCents = monthTransactions
         .where((transaction) => transaction.type == 'expense')
@@ -435,15 +439,20 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
         continue;
       }
 
-      final transactionTotal = monthTransactions
+      final invoiceTransactions = monthTransactions
           .where(
             (transaction) =>
                 transaction.paymentMethod == 'credit_card' &&
                 transaction.creditCardId == card.id,
           )
-          .fold<int>(0, (total, transaction) => total + transaction.amount);
-      final amount =
-          transactionTotal > 0 ? transactionTotal : invoice?.amount ?? 0;
+          .toList();
+      final transactionTotal = invoiceTransactions.fold<int>(
+        0,
+        (total, transaction) => total + _invoiceAmountDelta(transaction),
+      );
+      final amount = invoiceTransactions.isNotEmpty
+          ? transactionTotal.clamp(0, 1 << 31).toInt()
+          : invoice?.amount ?? 0;
       if (amount <= 0) {
         continue;
       }
@@ -492,6 +501,12 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
     }
 
     return transaction.dueDate ?? transaction.date;
+  }
+
+  int _invoiceAmountDelta(FinanceTransaction transaction) {
+    return transaction.type == 'income'
+        ? -transaction.amount
+        : transaction.amount;
   }
 
   DateTime _creditCardDueDate({

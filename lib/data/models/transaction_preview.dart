@@ -7,6 +7,7 @@ class TransactionPreview {
     required this.amountCents,
     required this.icon,
     required this.iconColor,
+    this.dateLabel,
     this.isIncome = false,
     this.isPaid = true,
   });
@@ -16,6 +17,7 @@ class TransactionPreview {
   final int amountCents;
   final IconData icon;
   final Color iconColor;
+  final String? dateLabel;
   final bool isIncome;
   final bool isPaid;
 }

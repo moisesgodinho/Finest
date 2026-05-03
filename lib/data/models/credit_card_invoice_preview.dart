@@ -47,8 +47,10 @@ class CreditCardInvoiceTransactionPreview {
     required this.date,
     required this.categoryId,
     required this.categoryName,
+    required this.type,
     this.subcategoryId,
     this.subcategoryName,
+    this.entryKind,
     this.installmentNumber,
     this.totalInstallments,
   });
@@ -59,8 +61,27 @@ class CreditCardInvoiceTransactionPreview {
   final DateTime date;
   final int categoryId;
   final String categoryName;
+  final String type;
   final int? subcategoryId;
   final String? subcategoryName;
+  final String? entryKind;
   final int? installmentNumber;
   final int? totalInstallments;
+
+  bool get isExpense => type == 'expense';
+  bool get isCredit => type == 'income';
+  bool get isRefund => entryKind == 'refund';
+  bool get isCashback => entryKind == 'cashback';
+
+  int get signedAmountCents => isCredit ? -amountCents : amountCents;
+
+  String get entryKindLabel {
+    if (isRefund) {
+      return 'Estorno';
+    }
+    if (isCashback) {
+      return 'Cashback';
+    }
+    return 'Gasto';
+  }
 }

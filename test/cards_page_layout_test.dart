@@ -39,7 +39,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Cartões'), findsWidgets);
-    expect(find.text('Meus cartões'), findsOneWidget);
+    expect(find.text('Gastos por categoria'), findsOneWidget);
+    expect(find.text('Registros da fatura'), findsOneWidget);
     // Layout exceptions fail the test automatically.
   });
 }
@@ -97,6 +98,7 @@ final _cardsState = CardsState(
           date: _fixedDate,
           categoryId: 1,
           categoryName: 'Alimentação',
+          type: 'expense',
         ),
       ],
     ),

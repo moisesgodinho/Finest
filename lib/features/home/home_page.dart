@@ -1109,13 +1109,63 @@ class _TransactionTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          _TransactionAmountDate(
+            amount: CurrencyUtils.formatCents(transaction.amountCents),
+            date: transaction.dateLabel ?? '',
+            prefix: prefix,
+            color: color,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransactionAmountDate extends StatelessWidget {
+  const _TransactionAmountDate({
+    required this.amount,
+    required this.date,
+    required this.prefix,
+    required this.color,
+  });
+
+  final String amount;
+  final String date;
+  final String prefix;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 118),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
           Text(
-            '$prefix${CurrencyUtils.formatCents(transaction.amountCents)}',
+            '$prefix$amount',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: color,
                   fontWeight: FontWeight.w800,
                 ),
           ),
+          if (date.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              date,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
         ],
       ),
     );

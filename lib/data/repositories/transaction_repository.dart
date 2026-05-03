@@ -157,7 +157,7 @@ class DriftTransactionRepository implements TransactionRepository {
           invoice: invoice,
           month: invoiceMonth,
           year: invoiceYear,
-          amountDelta: request.amountCents,
+          amountDelta: _invoiceDelta(request),
         );
       } else {
         await _database.accountsDao.updateCurrentBalance(
@@ -221,7 +221,7 @@ class DriftTransactionRepository implements TransactionRepository {
           invoice: invoice,
           month: invoiceMonth,
           year: invoiceYear,
-          amountDelta: transaction.amount,
+          amountDelta: _invoiceDeltaForTransaction(transaction),
         );
       } else {
         await _database.accountsDao.updateCurrentBalance(
@@ -382,7 +382,7 @@ class DriftTransactionRepository implements TransactionRepository {
       }
       if (transaction.paymentMethod != 'credit_card' ||
           transaction.creditCardId == null ||
-          transaction.type != 'expense') {
+          (transaction.type != 'expense' && transaction.type != 'income')) {
         throw StateError('Esta compra nÃ£o pertence a uma fatura de cartÃ£o.');
       }
 
@@ -393,7 +393,7 @@ class DriftTransactionRepository implements TransactionRepository {
       if (category == null) {
         throw StateError('Categoria nÃ£o encontrada.');
       }
-      if (category.type != 'expense') {
+      if (category.type != transaction.type) {
         throw StateError('Categoria incompatÃ­vel com despesa.');
       }
 
@@ -428,7 +428,11 @@ class DriftTransactionRepository implements TransactionRepository {
         throw StateError('Esta fatura jÃ¡ foi paga.');
       }
 
-      final amountDelta = request.amountCents - transaction.amount;
+      final amountDelta = _invoiceDeltaFor(
+            type: transaction.type,
+            amountCents: request.amountCents,
+          ) -
+          _invoiceDeltaForTransaction(transaction);
       if (transaction.isPaid && amountDelta != 0) {
         await _addAmountToInvoice(
           userId: request.userId,
@@ -503,7 +507,7 @@ class DriftTransactionRepository implements TransactionRepository {
             invoice: invoice,
             month: invoiceMonth,
             year: invoiceYear,
-            amountDelta: -transaction.amount,
+            amountDelta: -_invoiceDeltaForTransaction(transaction),
           );
         }
       }
@@ -590,6 +594,27 @@ class DriftTransactionRepository implements TransactionRepository {
     return request.type == 'income'
         ? request.amountCents
         : -request.amountCents;
+  }
+
+  int _invoiceDelta(CreateTransactionRequest request) {
+    return _invoiceDeltaFor(
+      type: request.type,
+      amountCents: request.amountCents,
+    );
+  }
+
+  int _invoiceDeltaForTransaction(FinanceTransaction transaction) {
+    return _invoiceDeltaFor(
+      type: transaction.type,
+      amountCents: transaction.amount,
+    );
+  }
+
+  int _invoiceDeltaFor({
+    required String type,
+    required int amountCents,
+  }) {
+    return type == 'income' ? -amountCents : amountCents;
   }
 
   int _requestDelta(UpdateTransactionRequest request) {
