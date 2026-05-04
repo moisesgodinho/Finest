@@ -6,6 +6,7 @@ class CreateAccountRequest {
     required this.initialBalance,
     this.bankName,
     this.emergencyReserveTarget,
+    this.includeInTotalBalance = true,
     this.color = '#006B4F',
     this.icon,
   });
@@ -16,6 +17,7 @@ class CreateAccountRequest {
   final String? bankName;
   final int initialBalance;
   final int? emergencyReserveTarget;
+  final bool includeInTotalBalance;
   final String color;
   final String? icon;
 }

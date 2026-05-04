@@ -1,5 +1,5 @@
-name: finance_pet
-description: Base inicial offline-first para um app de financas pessoais em Flutter.
+name: finest
+description: Base inicial offline-first para o Finest, um app de financas pessoais em Flutter.
 publish_to: "none"
 version: 0.1.0+1
 

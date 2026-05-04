@@ -5,5 +5,5 @@ import 'app.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: FinancePetApp()));
+  runApp(const ProviderScope(child: FinestApp()));
 }

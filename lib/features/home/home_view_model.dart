@@ -122,14 +122,14 @@ class HomeState {
 
     final difference = currentBalanceCents - initialMonthBalanceCents;
     if (difference == 0) {
-      return 'Sem variaÃ§Ã£o vs. inÃ­cio do mÃªs';
+      return 'Sem variação vs. início do mês';
     }
 
     final percent = (difference / initialMonthBalanceCents.abs()) * 100;
     final formattedPercent =
         percent.abs().toStringAsFixed(1).replaceAll('.', ',');
     final direction = difference > 0 ? 'acima' : 'abaixo';
-    return '$formattedPercent% $direction do inÃ­cio do mÃªs';
+    return '$formattedPercent% $direction do início do mês';
   }
 
   HomeState copyWith({
@@ -310,7 +310,9 @@ class HomeViewModel extends StateNotifier<HomeState> {
         _paidCreditCardInvoicesInMonth(firstDay, lastDay);
     final currentBalanceCents = _accounts.fold<int>(
       0,
-      (total, account) => total + account.currentBalance,
+      (total, account) => account.includeInTotalBalance
+          ? total + account.currentBalance
+          : total,
     );
     final initialMonthBalanceCents = currentBalanceCents -
         paidAccountIncomeCents +

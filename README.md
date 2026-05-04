@@ -1,4 +1,4 @@
-# FinancePet
+# Finest
 
 Base inicial de um app Flutter offline-first para controle financeiro pessoal.
 

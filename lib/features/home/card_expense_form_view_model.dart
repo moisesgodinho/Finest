@@ -198,7 +198,7 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
 
     if (amountCents < installments) {
       throw ArgumentError(
-        'O valor total nÃ£o permite dividir todas as parcelas com valor maior que zero.',
+        'O valor total não permite dividir todas as parcelas com valor maior que zero.',
       );
     }
 

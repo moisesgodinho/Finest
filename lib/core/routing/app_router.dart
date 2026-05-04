@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login/login_page.dart';
 import '../../features/categories/categories_page.dart';
+import '../../features/goals/goals_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/investments/investments_page.dart';
 import '../../features/pet/pet_page.dart';
@@ -16,6 +17,7 @@ class AppRoutes {
   static const login = '/login';
   static const home = '/home';
   static const categories = '/categories';
+  static const goals = '/goals';
   static const transactions = '/transactions';
   static const investments = '/investments';
   static const pet = '/pet';
@@ -61,6 +63,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.categories,
         name: 'categories',
         builder: (context, state) => const CategoriesPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.goals,
+        name: 'goals',
+        builder: (context, state) => const GoalsPage(),
       ),
       GoRoute(
         path: AppRoutes.transactions,

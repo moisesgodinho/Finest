@@ -80,7 +80,9 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,

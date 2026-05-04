@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../shared/widgets/section_card.dart';
-import 'finance_pet_avatar.dart';
+import 'finest_pet_avatar.dart';
 import 'pet_view_model.dart';
 
 class PetPage extends ConsumerWidget {
@@ -16,11 +16,17 @@ class PetPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FinancePet'),
+        title: const Text('Finest'),
       ),
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            28 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             _PetHeroCard(state: state),
             const SizedBox(height: 18),
@@ -52,7 +58,7 @@ class _PetHeroCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
-            child: FinancePetAvatar(
+            child: FinestPetAvatar(
               level: state.level,
               progress: state.progressToNextLevel,
               size: 190,

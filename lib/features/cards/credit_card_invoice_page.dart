@@ -125,8 +125,14 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
               label: const Text('Registro'),
             ),
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            96 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             if (state.isLoading) ...[
               const LinearProgressIndicator(minHeight: 3),
@@ -1682,7 +1688,9 @@ class _InvoiceEntrySheetState extends State<_InvoiceEntrySheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,
@@ -1965,7 +1973,9 @@ class _PurchaseEditSheetState extends State<_PurchaseEditSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,

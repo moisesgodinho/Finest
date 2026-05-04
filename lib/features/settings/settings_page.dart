@@ -22,8 +22,14 @@ class SettingsPage extends ConsumerWidget {
     final themePreference = ref.watch(themeControllerProvider);
 
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -70,10 +76,11 @@ class SettingsPage extends ConsumerWidget {
                   subtitle: 'Receitas e despesas',
                   onTap: () => context.push(AppRoutes.categories),
                 ),
-                const _SettingsShortcut(
+                _SettingsShortcut(
                   icon: Icons.flag_outlined,
                   title: 'Metas',
                   subtitle: 'Objetivos e reservas',
+                  onTap: () => context.push(AppRoutes.goals),
                 ),
                 const _SettingsShortcut(
                   icon: Icons.account_balance_wallet_outlined,
@@ -376,7 +383,7 @@ class _SettingsShortcut extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-        width: 166,
+        width: _shortcutWidth(context),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colors.surface,
@@ -421,6 +428,15 @@ class _SettingsShortcut extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  double _shortcutWidth(BuildContext context) {
+    const pageHorizontalPadding = 40.0;
+    const spacing = 12.0;
+    final availableWidth =
+        MediaQuery.sizeOf(context).width - pageHorizontalPadding;
+    final columnCount = availableWidth >= 720 ? 4 : 2;
+    return (availableWidth - spacing * (columnCount - 1)) / columnCount;
   }
 }
 
@@ -558,7 +574,7 @@ class _ThemePickerSheet extends StatelessWidget {
           Text('Tema', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
           Text(
-            'Escolha como o FinancePet deve aparecer neste aparelho.',
+            'Escolha como o Finest deve aparecer neste aparelho.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 14),

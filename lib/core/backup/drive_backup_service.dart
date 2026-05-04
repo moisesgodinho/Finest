@@ -18,11 +18,11 @@ class DriveBackupService implements BackupService {
       }
 
       final fileName =
-          'finance_pet_user_${userId}_${DateTime.now().millisecondsSinceEpoch}.backup';
+          'finest_user_${userId}_${DateTime.now().millisecondsSinceEpoch}.backup';
       final backupFile = File(p.join(backupsDir.path, fileName));
 
       // TODO: Copiar o arquivo SQLite real e metadados quando o schema estiver em producao.
-      await backupFile.writeAsString('FinancePet local backup placeholder');
+      await backupFile.writeAsString('Finest local backup placeholder');
 
       return Result.success(backupFile);
     } catch (error, stackTrace) {
@@ -76,7 +76,7 @@ class DriveBackupService implements BackupService {
 
       // TODO: Baixar o arquivo real do Google Drive e salvar localmente.
       await file.create(recursive: true);
-      await file.writeAsString('Downloaded FinancePet backup placeholder');
+      await file.writeAsString('Downloaded Finest backup placeholder');
 
       return Result.success(file);
     } catch (error, stackTrace) {

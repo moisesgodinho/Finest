@@ -378,12 +378,12 @@ class DriftTransactionRepository implements TransactionRepository {
         userId: request.userId,
       );
       if (transaction == null) {
-        throw StateError('Compra nÃ£o encontrada.');
+        throw StateError('Compra não encontrada.');
       }
       if (transaction.paymentMethod != 'credit_card' ||
           transaction.creditCardId == null ||
           (transaction.type != 'expense' && transaction.type != 'income')) {
-        throw StateError('Esta compra nÃ£o pertence a uma fatura de cartÃ£o.');
+        throw StateError('Esta compra não pertence a uma fatura de cartão.');
       }
 
       final category = await _database.categoriesDao.findByIdForUser(
@@ -391,10 +391,10 @@ class DriftTransactionRepository implements TransactionRepository {
         userId: request.userId,
       );
       if (category == null) {
-        throw StateError('Categoria nÃ£o encontrada.');
+        throw StateError('Categoria não encontrada.');
       }
       if (category.type != transaction.type) {
-        throw StateError('Categoria incompatÃ­vel com despesa.');
+        throw StateError('Categoria incompatível com despesa.');
       }
 
       if (request.subcategoryId != null) {
@@ -404,7 +404,7 @@ class DriftTransactionRepository implements TransactionRepository {
           userId: request.userId,
         );
         if (subcategory == null || subcategory.categoryId != category.id) {
-          throw StateError('Subcategoria incompatÃ­vel com a categoria.');
+          throw StateError('Subcategoria incompatível com a categoria.');
         }
       }
 
@@ -413,7 +413,7 @@ class DriftTransactionRepository implements TransactionRepository {
         userId: request.userId,
       );
       if (creditCard == null) {
-        throw StateError('CartÃ£o de crÃ©dito nÃ£o encontrado.');
+        throw StateError('Cartão de crédito não encontrado.');
       }
 
       final invoiceMonth = transaction.invoiceMonth ?? DateTime.now().month;
@@ -425,7 +425,7 @@ class DriftTransactionRepository implements TransactionRepository {
         year: invoiceYear,
       );
       if (invoice?.status == 'paid') {
-        throw StateError('Esta fatura jÃ¡ foi paga.');
+        throw StateError('Esta fatura já foi paga.');
       }
 
       final amountDelta = _invoiceDeltaFor(
@@ -457,7 +457,7 @@ class DriftTransactionRepository implements TransactionRepository {
         ),
       );
       if (affectedRows == 0) {
-        throw StateError('Compra nÃ£o atualizada.');
+        throw StateError('Compra não atualizada.');
       }
     });
   }

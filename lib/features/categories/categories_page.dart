@@ -41,8 +41,14 @@ class CategoriesPage extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            28 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             if (state.isLoading) ...[
               const LinearProgressIndicator(minHeight: 3),
@@ -1069,7 +1075,9 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,
@@ -1208,7 +1216,9 @@ class _SubcategoryFormSheetState extends State<_SubcategoryFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,

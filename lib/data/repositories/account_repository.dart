@@ -50,6 +50,7 @@ class DriftAccountRepository implements AccountRepository {
         initialBalance: Value(request.initialBalance),
         currentBalance: Value(request.initialBalance),
         emergencyReserveTarget: Value(request.emergencyReserveTarget),
+        includeInTotalBalance: Value(request.includeInTotalBalance),
         color: Value(request.color),
         icon: Value(request.icon),
         createdAt: Value(now),
@@ -70,6 +71,7 @@ class DriftAccountRepository implements AccountRepository {
         initialBalance: Value(request.initialBalance),
         currentBalance: Value(request.currentBalance),
         emergencyReserveTarget: Value(request.emergencyReserveTarget),
+        includeInTotalBalance: Value(request.includeInTotalBalance),
         color: Value(request.color),
         icon: Value(request.icon),
         updatedAt: Value(DateTime.now()),
@@ -101,7 +103,9 @@ class DriftAccountRepository implements AccountRepository {
     final accounts = await findAccounts(userId);
     return accounts.fold<int>(
       0,
-      (total, account) => total + account.currentBalance,
+      (total, account) => account.includeInTotalBalance
+          ? total + account.currentBalance
+          : total,
     );
   }
 }

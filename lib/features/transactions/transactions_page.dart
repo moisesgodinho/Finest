@@ -48,8 +48,14 @@ class TransactionsPage extends ConsumerWidget {
               child: const Icon(Icons.add_rounded, size: 34),
             ),
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 104),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            104 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             if (state.isLoading) ...[
               const LinearProgressIndicator(minHeight: 3),
@@ -245,7 +251,7 @@ class TransactionsPage extends ConsumerWidget {
       ),
       builder: (context) {
         if (transaction.isTransfer) {
-          return _TransferEditFormSheet(
+          return TransferEditFormSheet(
             transfer: transaction,
             accounts: state.accounts,
             onSubmit: ({
@@ -275,7 +281,7 @@ class TransactionsPage extends ConsumerWidget {
           );
         }
 
-        return _TransactionEditFormSheet(
+        return TransactionEditFormSheet(
           transaction: transaction,
           accounts: state.accounts,
           categories: state.categories,
@@ -1254,8 +1260,9 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _TransactionEditFormSheet extends StatefulWidget {
-  const _TransactionEditFormSheet({
+class TransactionEditFormSheet extends StatefulWidget {
+  const TransactionEditFormSheet({
+    super.key,
     required this.transaction,
     required this.accounts,
     required this.categories,
@@ -1282,11 +1289,11 @@ class _TransactionEditFormSheet extends StatefulWidget {
   }) onSubmit;
 
   @override
-  State<_TransactionEditFormSheet> createState() =>
+  State<TransactionEditFormSheet> createState() =>
       _TransactionEditFormSheetState();
 }
 
-class _TransactionEditFormSheetState extends State<_TransactionEditFormSheet> {
+class _TransactionEditFormSheetState extends State<TransactionEditFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _descriptionController;
   late final TextEditingController _amountController;
@@ -1381,7 +1388,9 @@ class _TransactionEditFormSheetState extends State<_TransactionEditFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,
@@ -1631,8 +1640,9 @@ class _TransactionEditFormSheetState extends State<_TransactionEditFormSheet> {
   }
 }
 
-class _TransferEditFormSheet extends StatefulWidget {
-  const _TransferEditFormSheet({
+class TransferEditFormSheet extends StatefulWidget {
+  const TransferEditFormSheet({
+    super.key,
     required this.transfer,
     required this.accounts,
     required this.onSubmit,
@@ -1653,10 +1663,10 @@ class _TransferEditFormSheet extends StatefulWidget {
   }) onSubmit;
 
   @override
-  State<_TransferEditFormSheet> createState() => _TransferEditFormSheetState();
+  State<TransferEditFormSheet> createState() => _TransferEditFormSheetState();
 }
 
-class _TransferEditFormSheetState extends State<_TransferEditFormSheet> {
+class _TransferEditFormSheetState extends State<TransferEditFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
@@ -1720,7 +1730,9 @@ class _TransferEditFormSheetState extends State<_TransferEditFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,
@@ -2023,7 +2035,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,

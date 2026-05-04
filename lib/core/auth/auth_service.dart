@@ -76,7 +76,7 @@ class LocalAuthService implements AuthService {
   Future<AppUser> signInWithProvider(SocialAuthProvider provider) async {
     final user = await _userRepository.findOrCreate(
       name: _providerDisplayName(provider),
-      email: '${provider.name}@financepet.local',
+      email: '${provider.name}@finest.local',
     );
     await _categoryRepository.ensureDefaultCategories(user.id);
     await _saveSession(user.id);
@@ -97,7 +97,7 @@ class LocalAuthService implements AuthService {
   String _nameFromEmail(String email) {
     final namePart = email.split('@').first.replaceAll('.', ' ').trim();
     if (namePart.isEmpty) {
-      return 'Usuário FinancePet';
+      return 'Usuário Finest';
     }
 
     return namePart

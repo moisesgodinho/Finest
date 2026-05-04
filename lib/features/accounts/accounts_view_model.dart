@@ -32,7 +32,8 @@ class AccountsState {
   int get totalBalanceCents {
     return accounts.fold<int>(
       0,
-      (total, account) => total + account.balanceCents,
+      (total, account) =>
+          account.includeInTotalBalance ? total + account.balanceCents : total,
     );
   }
 
@@ -42,13 +43,13 @@ class AccountsState {
 
   AccountPreview? get emergencyReserveAccount {
     for (final account in accounts) {
-      if (account.emergencyReserveTargetCents != null) {
+      if (!account.isGoal && account.emergencyReserveTargetCents != null) {
         return account;
       }
     }
 
     for (final account in accounts) {
-      if (account.isEmergencyReserve) {
+      if (!account.isGoal && account.isEmergencyReserve) {
         return account;
       }
     }
@@ -128,6 +129,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     required String type,
     required int initialBalance,
     int? emergencyReserveTarget,
+    bool includeInTotalBalance = true,
     String? bankName,
     String color = '#006B4F',
   }) async {
@@ -143,6 +145,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           bankName: bankName,
           initialBalance: initialBalance,
           emergencyReserveTarget: emergencyReserveTarget,
+          includeInTotalBalance: includeInTotalBalance,
           color: color,
         ),
       );
@@ -161,6 +164,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     required String type,
     required int balanceCents,
     int? emergencyReserveTarget,
+    bool? includeInTotalBalance,
     String? bankName,
     String color = '#006B4F',
   }) async {
@@ -178,6 +182,8 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           initialBalance: balanceCents,
           currentBalance: balanceCents,
           emergencyReserveTarget: emergencyReserveTarget,
+          includeInTotalBalance:
+              includeInTotalBalance ?? account.includeInTotalBalance,
           color: color,
         ),
       );
@@ -324,6 +330,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      includeInTotalBalance: account.includeInTotalBalance,
       emergencyReserveTargetCents: account.emergencyReserveTarget,
       color: _parseColor(account.color),
       colorHex: account.color,

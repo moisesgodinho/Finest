@@ -187,7 +187,10 @@ class IncomeFormViewModel extends StateNotifier<IncomeFormState> {
     _accountsSubscription = _accountRepository.watchAccounts(userId).listen(
       (accounts) {
         state = state.copyWith(
-          accounts: accounts.map(_mapAccount).toList(),
+          accounts: accounts
+              .where((account) => account.type != 'goal')
+              .map(_mapAccount)
+              .toList(),
           isLoading: false,
           clearError: true,
         );
@@ -288,6 +291,7 @@ class IncomeFormViewModel extends StateNotifier<IncomeFormState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,
     );

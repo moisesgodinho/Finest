@@ -18,8 +18,14 @@ class InvestmentsPage extends ConsumerWidget {
         title: const Text('Investimentos'),
       ),
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            28 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             SectionCard(
               title: 'Carteira inicial',

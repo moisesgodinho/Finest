@@ -31,8 +31,14 @@ class AccountsPage extends ConsumerWidget {
     });
 
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -785,7 +791,9 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,

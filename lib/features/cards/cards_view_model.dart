@@ -398,7 +398,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required DateTime date,
   }) async {
     if (invoice.isPaid) {
-      throw StateError('Esta fatura jÃ¡ foi paga.');
+      throw StateError('Esta fatura já foi paga.');
     }
 
     final userId = _requireUserId();
@@ -430,7 +430,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required CreditCardInvoiceTransactionPreview transaction,
   }) async {
     if (invoice.isPaid) {
-      throw StateError('Esta fatura jÃ¡ foi paga.');
+      throw StateError('Esta fatura já foi paga.');
     }
 
     final userId = _requireUserId();
@@ -527,7 +527,10 @@ class CardsViewModel extends StateNotifier<CardsState> {
     final currentInvoiceTotalsByCard = _currentInvoiceTotalsByCard();
 
     state = state.copyWith(
-      accounts: _accounts.map(_mapAccount).toList(),
+      accounts: _accounts
+          .where((account) => account.type != 'goal')
+          .map(_mapAccount)
+          .toList(),
       cards: [
         for (final card in _cards)
           _mapCard(
@@ -598,6 +601,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,
     );

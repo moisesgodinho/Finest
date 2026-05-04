@@ -877,6 +877,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,
     );

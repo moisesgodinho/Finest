@@ -5,8 +5,8 @@ import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import '../../core/theme/app_colors.dart';
 
-class FinancePetAvatar extends StatelessWidget {
-  const FinancePetAvatar({
+class FinestPetAvatar extends StatelessWidget {
+  const FinestPetAvatar({
     required this.level,
     required this.progress,
     this.size = 148,
@@ -24,7 +24,7 @@ class FinancePetAvatar extends StatelessWidget {
     final colors = context.colors;
 
     if (level <= 1) {
-      return _FinancePetLevelOneModel(
+      return _FinestLevelOneModel(
         size: size,
         showEnvironment: showEnvironment,
         colors: colors,
@@ -34,7 +34,7 @@ class FinancePetAvatar extends StatelessWidget {
     return SizedBox.square(
       dimension: size,
       child: CustomPaint(
-        painter: _FinancePetAvatarPainter(
+        painter: _FinestAvatarPainter(
           level: level,
           progress: progress.clamp(0.0, 1.0).toDouble(),
           showEnvironment: showEnvironment,
@@ -45,8 +45,8 @@ class FinancePetAvatar extends StatelessWidget {
   }
 }
 
-class _FinancePetLevelOneModel extends StatelessWidget {
-  const _FinancePetLevelOneModel({
+class _FinestLevelOneModel extends StatelessWidget {
+  const _FinestLevelOneModel({
     required this.size,
     required this.showEnvironment,
     required this.colors,
@@ -88,7 +88,7 @@ class _FinancePetLevelOneModel extends StatelessWidget {
           borderRadius: borderRadius,
           child: const ModelViewer(
             src: _modelPath,
-            alt: 'FinancePet nivel 1',
+            alt: 'Finest nivel 1',
             autoRotate: true,
             cameraControls: false,
             disableZoom: true,
@@ -100,8 +100,8 @@ class _FinancePetLevelOneModel extends StatelessWidget {
   }
 }
 
-class _FinancePetAvatarPainter extends CustomPainter {
-  const _FinancePetAvatarPainter({
+class _FinestAvatarPainter extends CustomPainter {
+  const _FinestAvatarPainter({
     required this.level,
     required this.progress,
     required this.showEnvironment,
@@ -503,7 +503,7 @@ class _FinancePetAvatarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FinancePetAvatarPainter oldDelegate) {
+  bool shouldRepaint(covariant _FinestAvatarPainter oldDelegate) {
     return oldDelegate.level != level ||
         oldDelegate.progress != progress ||
         oldDelegate.showEnvironment != showEnvironment ||

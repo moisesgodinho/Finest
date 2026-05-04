@@ -8,7 +8,12 @@ import '../../data/models/account_preview.dart';
 import 'transfer_form_view_model.dart';
 
 class TransferFormSheet extends ConsumerStatefulWidget {
-  const TransferFormSheet({super.key});
+  const TransferFormSheet({
+    super.key,
+    this.initialToAccountId,
+  });
+
+  final int? initialToAccountId;
 
   @override
   ConsumerState<TransferFormSheet> createState() => _TransferFormSheetState();
@@ -33,6 +38,7 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
     final now = DateTime.now();
     _dueDate = now;
     _date = now;
+    _selectedToAccountId = widget.initialToAccountId;
   }
 
   @override
@@ -47,6 +53,7 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
   Widget build(BuildContext context) {
     final state = ref.watch(transferFormViewModelProvider);
     _syncSelections(state.accounts);
+    final sourceAccounts = _sourceAccounts(state.accounts);
 
     ref.listen(
       transferFormViewModelProvider.select((state) => state.errorMessage),
@@ -65,7 +72,9 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
         left: 20,
         right: 20,
         top: 20,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: Form(
         key: _formKey,
@@ -90,7 +99,7 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
               ),
               const SizedBox(height: 12),
               if (state.isLoading) const LinearProgressIndicator(minHeight: 3),
-              if (state.accounts.length < 2) ...[
+              if (!_hasTransferRequirement(state.accounts)) ...[
                 const SizedBox(height: 18),
                 const _MissingRequirement(),
               ] else ...[
@@ -201,7 +210,7 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
                     prefixIcon: Icon(Icons.call_made_rounded),
                   ),
                   items: [
-                    for (final account in state.accounts)
+                    for (final account in sourceAccounts)
                       DropdownMenuItem(
                         value: account.id,
                         child: Text(_accountLabel(account)),
@@ -294,18 +303,21 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
   }
 
   bool _canSubmit(TransferFormState state) {
-    return !_isSubmitting && state.accounts.length >= 2;
+    return !_isSubmitting && _hasTransferRequirement(state.accounts);
   }
 
   void _syncSelections(List<AccountPreview> accounts) {
-    if (accounts.length < 2) {
+    final sourceAccounts = _sourceAccounts(accounts);
+
+    if (!_hasTransferRequirement(accounts)) {
       _selectedFromAccountId = null;
       _selectedToAccountId = null;
       return;
     }
 
-    if (!accounts.any((account) => account.id == _selectedFromAccountId)) {
-      _selectedFromAccountId = accounts.first.id;
+    if (!sourceAccounts
+        .any((account) => account.id == _selectedFromAccountId)) {
+      _selectedFromAccountId = sourceAccounts.first.id;
     }
 
     if (!accounts.any((account) => account.id == _selectedToAccountId) ||
@@ -324,6 +336,16 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
       }
     }
     return null;
+  }
+
+  bool _hasTransferRequirement(List<AccountPreview> accounts) {
+    final sourceAccounts = _sourceAccounts(accounts);
+    return sourceAccounts.isNotEmpty &&
+        accounts.any((account) => account.id != sourceAccounts.first.id);
+  }
+
+  List<AccountPreview> _sourceAccounts(List<AccountPreview> accounts) {
+    return accounts.where((account) => !account.isGoal).toList();
   }
 
   Future<void> _pickDate({required bool isDueDate}) async {
@@ -405,7 +427,7 @@ class _MissingRequirement extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Cadastre pelo menos duas contas antes de criar transferências.',
+            'Cadastre uma conta normal e uma conta de destino antes de criar transferências.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),

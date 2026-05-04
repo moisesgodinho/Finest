@@ -57,7 +57,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -181,6 +181,17 @@ class AppDatabase extends _$AppDatabase {
               addColumn: () => migrator.addColumn(
                 accounts,
                 accounts.emergencyReserveTarget,
+              ),
+            );
+          }
+          if (from < 8) {
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'accounts',
+              columnName: 'include_in_total_balance',
+              addColumn: () => migrator.addColumn(
+                accounts,
+                accounts.includeInTotalBalance,
               ),
             );
           }

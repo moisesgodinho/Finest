@@ -6,8 +6,8 @@ import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 
-class FinancePetApp extends ConsumerWidget {
-  const FinancePetApp({super.key});
+class FinestApp extends ConsumerWidget {
+  const FinestApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -15,7 +15,7 @@ class FinancePetApp extends ConsumerWidget {
     final themePreference = ref.watch(themeControllerProvider);
 
     return MaterialApp.router(
-      title: 'FinancePet',
+      title: 'Finest',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

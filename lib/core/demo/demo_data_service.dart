@@ -22,7 +22,7 @@ class DemoDataService {
       userId = await _database.into(_database.users).insert(
             UsersCompanion.insert(
               name: 'Camila Souza',
-              email: 'camila@financepet.local',
+              email: 'camila@finest.local',
               createdAt: Value(createdAt),
               updatedAt: Value(createdAt),
             ),
@@ -77,7 +77,7 @@ class DemoDataService {
     return AppUser(
       id: userId,
       name: 'Camila Souza',
-      email: 'camila@financepet.local',
+      email: 'camila@finest.local',
     );
   }
 
@@ -961,7 +961,7 @@ class DemoDataService {
             backupType: 'manual',
             provider: 'local',
             status: 'success',
-            filePath: const Value('finance_pet_demo_backup.sqlite'),
+            filePath: const Value('finest_demo_backup.sqlite'),
             createdAt: Value(_monthDate(now, -1, 28)),
           ),
         );

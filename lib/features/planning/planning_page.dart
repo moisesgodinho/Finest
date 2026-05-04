@@ -28,8 +28,14 @@ class PlanningPage extends ConsumerWidget {
     final viewModel = ref.read(planningViewModelProvider.notifier);
 
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -722,7 +728,9 @@ class _PlanningFormSheetState extends ConsumerState<_PlanningFormSheet> {
         left: 20,
         right: 20,
         top: 18,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
       ),
       child: SingleChildScrollView(
         child: Column(

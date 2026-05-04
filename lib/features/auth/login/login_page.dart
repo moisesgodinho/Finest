@@ -21,13 +21,20 @@ class LoginPage extends ConsumerWidget {
         children: [
           const _LoginHeader(),
           SafeArea(
+            bottom: false,
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final bottomPadding = MediaQuery.viewPaddingOf(context).bottom;
                 return SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(22, 220, 22, 28),
+                  padding: EdgeInsets.fromLTRB(
+                    22,
+                    220,
+                    22,
+                    28 + bottomPadding,
+                  ),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight - 248,
+                      minHeight: constraints.maxHeight - 248 - bottomPadding,
                     ),
                     child: _LoginCard(
                       state: state,

@@ -6,7 +6,6 @@ import '../../core/routing/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../data/models/category_expense_preview.dart';
-import '../../data/models/credit_card_preview.dart';
 import '../../data/models/transaction_preview.dart';
 import '../../shared/widgets/balance_card.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
@@ -14,9 +13,11 @@ import '../../shared/widgets/section_card.dart';
 import '../accounts/accounts_page.dart';
 import '../cards/cards_page.dart';
 import '../planning/planning_page.dart';
-import '../pet/finance_pet_avatar.dart';
+import '../pet/finest_pet_avatar.dart';
 import '../pet/pet_view_model.dart';
 import '../settings/settings_page.dart';
+import '../transactions/transactions_page.dart';
+import '../transactions/transactions_view_model.dart';
 import 'card_expense_form_sheet.dart';
 import 'expense_form_sheet.dart';
 import 'home_view_model.dart';
@@ -52,7 +53,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               onPressed: _openCreateActionMenu,
               child: const Icon(Icons.add_rounded, size: 34),
             ),
-      bottomNavigationBar: FinancePetBottomNavBar(
+      bottomNavigationBar: FinestBottomNavBar(
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() => _currentIndex = index);
@@ -250,13 +251,22 @@ class _HomeDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(homeViewModelProvider);
     final petState = ref.watch(petViewModelProvider);
+    final transactionsState = ref.watch(transactionsViewModelProvider);
+    final pendingTransactions =
+        _currentMonthPendingTransactions(transactionsState);
     final viewModel = ref.read(homeViewModelProvider.notifier);
     final firstName = state.userName.split(' ').first;
     final colors = context.colors;
 
     return SafeArea(
+      bottom: false,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          100 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -321,12 +331,20 @@ class _HomeDashboard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 18),
-            _FinancePetHomeCard(
+            _FinestHomeCard(
               state: petState,
               onTap: () => context.push(AppRoutes.pet),
             ),
             const SizedBox(height: 18),
-            _ResponsiveSummarySection(state: state),
+            _ResponsiveSummarySection(
+              state: state,
+              pendingTransactions: pendingTransactions,
+              onOpenPendingTransactions: () => _openPendingTransactionsSheet(
+                context,
+                ref,
+                pendingTransactions,
+              ),
+            ),
             const SizedBox(height: 18),
             _CategoriesCard(
               categories: state.categories,
@@ -334,19 +352,238 @@ class _HomeDashboard extends ConsumerWidget {
             ),
             const SizedBox(height: 18),
             _RecentTransactionsCard(transactions: state.recentTransactions),
-            const SizedBox(height: 18),
-            _QuickActions(onOpenInvestments: () {
-              context.push(AppRoutes.investments);
-            }),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _openPendingTransactionsSheet(
+    BuildContext context,
+    WidgetRef ref,
+    List<TransactionListItem> transactions,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return _PendingTransactionsSheet(
+          transactions: transactions,
+          onEdit: (transaction) async {
+            Navigator.of(sheetContext).pop();
+            if (!context.mounted) {
+              return;
+            }
+            await _openPendingEditForm(context, ref, transaction);
+          },
+          onMarkAsPaid: (transaction) async {
+            Navigator.of(sheetContext).pop();
+            if (!context.mounted) {
+              return;
+            }
+            await _confirmMarkPendingAsPaid(context, ref, transaction);
+          },
+          onDelete: (transaction) async {
+            Navigator.of(sheetContext).pop();
+            if (!context.mounted) {
+              return;
+            }
+            await _confirmDeletePending(context, ref, transaction);
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openPendingEditForm(
+    BuildContext context,
+    WidgetRef ref,
+    TransactionListItem transaction,
+  ) async {
+    final state = ref.read(transactionsViewModelProvider);
+    final viewModel = ref.read(transactionsViewModelProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        if (transaction.isTransfer) {
+          return TransferEditFormSheet(
+            transfer: transaction,
+            accounts: state.accounts,
+            onSubmit: ({
+              required int fromAccountId,
+              required int toAccountId,
+              required String name,
+              required int amountCents,
+              required String transferKind,
+              required DateTime dueDate,
+              required bool isPaid,
+              required DateTime date,
+              int? totalInstallments,
+            }) async {
+              await viewModel.updateTransfer(
+                transfer: transaction,
+                fromAccountId: fromAccountId,
+                toAccountId: toAccountId,
+                name: name,
+                amountCents: amountCents,
+                transferKind: transferKind,
+                dueDate: dueDate,
+                isPaid: isPaid,
+                date: date,
+                totalInstallments: totalInstallments,
+              );
+            },
+          );
+        }
+
+        return TransactionEditFormSheet(
+          transaction: transaction,
+          accounts: state.accounts,
+          categories: state.categories,
+          subcategories: state.subcategories,
+          onSubmit: ({
+            required int accountId,
+            required int categoryId,
+            required String type,
+            required String description,
+            required int amountCents,
+            required DateTime? dueDate,
+            required DateTime date,
+            required bool isPaid,
+            int? subcategoryId,
+            String? transactionKind,
+            int? totalInstallments,
+          }) async {
+            await viewModel.updateTransaction(
+              transaction: transaction,
+              accountId: accountId,
+              categoryId: categoryId,
+              type: type,
+              description: description,
+              amountCents: amountCents,
+              dueDate: dueDate,
+              date: date,
+              isPaid: isPaid,
+              subcategoryId: subcategoryId,
+              transactionKind: transactionKind,
+              totalInstallments: totalInstallments,
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pendência atualizada.')),
+      );
+    }
+  }
+
+  Future<void> _confirmMarkPendingAsPaid(
+    BuildContext context,
+    WidgetRef ref,
+    TransactionListItem transaction,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Efetivar pendência?'),
+          content: Text(
+            transaction.isTransfer
+                ? 'O valor será movimentado entre as contas.'
+                : 'O saldo da conta será atualizado automaticamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Efetivar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(transactionsViewModelProvider.notifier)
+          .markItemAsPaid(transaction);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pendência efetivada.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _confirmDeletePending(
+    BuildContext context,
+    WidgetRef ref,
+    TransactionListItem transaction,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir pendência?'),
+          content: const Text('Esta ação remove o lançamento previsto.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(transactionsViewModelProvider.notifier)
+          .deleteItem(transaction);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pendência excluída.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
 }
 
-class _FinancePetHomeCard extends StatelessWidget {
-  const _FinancePetHomeCard({
+class _FinestHomeCard extends StatelessWidget {
+  const _FinestHomeCard({
     required this.state,
     required this.onTap,
   });
@@ -382,7 +619,7 @@ class _FinancePetHomeCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              FinancePetAvatar(
+              FinestPetAvatar(
                 level: state.level,
                 progress: state.progressToNextLevel,
                 size: 96,
@@ -396,7 +633,7 @@ class _FinancePetHomeCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'FinancePet',
+                            'Finest',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium,
@@ -490,11 +727,17 @@ class _FinancePetHomeCard extends StatelessWidget {
 }
 
 class _ResponsiveSummarySection extends StatelessWidget {
-  const _ResponsiveSummarySection({required this.state});
+  const _ResponsiveSummarySection({
+    required this.state,
+    required this.pendingTransactions,
+    required this.onOpenPendingTransactions,
+  });
 
   static const double _tabletBreakpoint = 700;
 
   final HomeState state;
+  final List<TransactionListItem> pendingTransactions;
+  final VoidCallback onOpenPendingTransactions;
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +751,12 @@ class _ResponsiveSummarySection extends StatelessWidget {
             children: [
               Expanded(child: _MonthlySummaryCard(state: state)),
               const SizedBox(width: 12),
-              Expanded(child: _CreditCardSummary(card: state.creditCard)),
+              Expanded(
+                child: _PendingTransactionsCard(
+                  transactions: pendingTransactions,
+                  onTap: onOpenPendingTransactions,
+                ),
+              ),
             ],
           );
         }
@@ -517,7 +765,10 @@ class _ResponsiveSummarySection extends StatelessWidget {
           children: [
             _MonthlySummaryCard(state: state),
             const SizedBox(height: 18),
-            _CreditCardSummary(card: state.creditCard),
+            _PendingTransactionsCard(
+              transactions: pendingTransactions,
+              onTap: onOpenPendingTransactions,
+            ),
           ],
         );
       },
@@ -796,116 +1047,207 @@ class _PendingLine extends StatelessWidget {
   }
 }
 
-class _CreditCardSummary extends StatelessWidget {
-  const _CreditCardSummary({required this.card});
+class _PendingTransactionsCard extends StatelessWidget {
+  const _PendingTransactionsCard({
+    required this.transactions,
+    required this.onTap,
+  });
 
-  final CreditCardPreview card;
+  final List<TransactionListItem> transactions;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final pendingIncomeCents = _pendingIncomeCents(transactions);
+    final pendingExpenseCents = _pendingExpenseCents(transactions);
+    final pendingTransferCents = _pendingTransferCents(transactions);
+    final totalPendingCents = _pendingTotalCents(transactions);
 
-    if (card.id == 0) {
-      return SectionCard(
-        title: 'CartÃ£o',
-        trailing: const _SectionAction(label: 'Ver'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: colors.accentSoft,
-                foregroundColor: colors.primary,
-                child: const Icon(Icons.credit_card_off_rounded),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Cadastre um cartÃ£o para acompanhar fatura e limite.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+    return SectionCard(
+      title: 'Transações pendentes',
+      trailing: _SectionAction(
+        label: 'Ver',
+        onTap: transactions.isEmpty ? null : onTap,
+      ),
+      child: transactions.isEmpty
+          ? const _EmptySectionMessage(
+              icon: Icons.fact_check_outlined,
+              message:
+                  'Nenhuma receita, despesa ou transferência pendente neste mês.',
+            )
+          : Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            backgroundColor:
+                                colors.warning.withValues(alpha: 0.12),
+                            foregroundColor: colors.warning,
+                            child: const Icon(Icons.pending_actions_rounded),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  CurrencyUtils.formatCents(totalPendingCents),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(color: colors.warning),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${transactions.length} pendências no mês',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (pendingIncomeCents > 0)
+                            _PendingChip(
+                              label: 'A receber',
+                              value: CurrencyUtils.formatCents(
+                                pendingIncomeCents,
+                              ),
+                              color: AppColors.success,
+                            ),
+                          if (pendingExpenseCents > 0)
+                            _PendingChip(
+                              label: 'A pagar',
+                              value: CurrencyUtils.formatCents(
+                                pendingExpenseCents,
+                              ),
+                              color: AppColors.danger,
+                            ),
+                          if (pendingTransferCents > 0)
+                            _PendingChip(
+                              label: 'Transferências',
+                              value: CurrencyUtils.formatCents(
+                                pendingTransferCents,
+                              ),
+                              color: AppColors.info,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      for (final transaction in transactions.take(3)) ...[
+                        _PendingPreviewRow(transaction: transaction),
+                        if (transaction != transactions.take(3).last)
+                          const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
                 ),
+              ),
+            ),
+    );
+  }
+}
+
+class _PendingChip extends StatelessWidget {
+  const _PendingChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label · $value',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
+    );
+  }
+}
+
+class _PendingPreviewRow extends StatelessWidget {
+  const _PendingPreviewRow({required this.transaction});
+
+  final TransactionListItem transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final amountColor = transaction.isIncome
+        ? AppColors.success
+        : transaction.isTransfer
+            ? AppColors.info
+            : colors.textPrimary;
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: transaction.iconColor.withValues(alpha: 0.12),
+          foregroundColor: transaction.iconColor,
+          child: Icon(transaction.icon, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                transaction.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              Text(
+                _pendingSubtitle(transaction),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                    ),
               ),
             ],
           ),
         ),
-      );
-    }
-
-    return SectionCard(
-      title: 'Cartão',
-      trailing: const _SectionAction(label: 'Ver'),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colors.primaryDark,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: card.color,
-                  child: Text(
-                    card.name.substring(0, 2).toLowerCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${card.name} •••• ${card.lastDigits}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Fatura atual',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              CurrencyUtils.formatCents(card.invoiceCents),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                  ),
-            ),
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: card.usedPercent,
-                minHeight: 8,
-                backgroundColor: Colors.white24,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  colors.primaryLight,
-                ),
+        const SizedBox(width: 8),
+        Text(
+          _amountWithPrefix(transaction),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: amountColor,
+                fontWeight: FontWeight.w900,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Vencimento dia ${card.dueDay}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                  ),
-            ),
-          ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -930,7 +1272,7 @@ class _CategoriesCard extends StatelessWidget {
       child: categories.isEmpty
           ? const _EmptySectionMessage(
               icon: Icons.pie_chart_outline_rounded,
-              message: 'Os gastos por categoria aparecem apÃ³s lanÃ§amentos.',
+              message: 'Os gastos por categoria aparecem após lançamentos.',
             )
           : Column(
               children: [
@@ -1052,7 +1394,7 @@ class _RecentTransactionsCard extends StatelessWidget {
       child: transactions.isEmpty
           ? const _EmptySectionMessage(
               icon: Icons.receipt_long_outlined,
-              message: 'Seus lanÃ§amentos recentes aparecerÃ£o aqui.',
+              message: 'Seus lançamentos recentes aparecerão aqui.',
             )
           : Column(
               children: [
@@ -1172,42 +1514,166 @@ class _TransactionAmountDate extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.onOpenInvestments});
+class _PendingTransactionsSheet extends StatelessWidget {
+  const _PendingTransactionsSheet({
+    required this.transactions,
+    required this.onEdit,
+    required this.onMarkAsPaid,
+    required this.onDelete,
+  });
 
-  final VoidCallback onOpenInvestments;
+  final List<TransactionListItem> transactions;
+  final ValueChanged<TransactionListItem> onEdit;
+  final ValueChanged<TransactionListItem> onMarkAsPaid;
+  final ValueChanged<TransactionListItem> onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      title: 'Ações rápidas',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: transactions.length > 5 ? 0.72 : 0.56,
+      minChildSize: 0.36,
+      maxChildSize: 0.92,
+      builder: (context, scrollController) {
+        return ListView(
+          controller: scrollController,
+          padding: EdgeInsets.fromLTRB(
+            20,
+            18,
+            20,
+            28 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Pendências do mês',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                Text(
+                  '${transactions.length} itens',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (transactions.isEmpty)
+              const _EmptySectionMessage(
+                icon: Icons.fact_check_outlined,
+                message: 'Nenhuma pendência para este mês.',
+              )
+            else
+              for (final transaction in transactions) ...[
+                _PendingTransactionTile(
+                  transaction: transaction,
+                  onEdit: () => onEdit(transaction),
+                  onMarkAsPaid: () => onMarkAsPaid(transaction),
+                  onDelete: () => onDelete(transaction),
+                ),
+                if (transaction != transactions.last) const Divider(height: 18),
+              ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PendingTransactionTile extends StatelessWidget {
+  const _PendingTransactionTile({
+    required this.transaction,
+    required this.onEdit,
+    required this.onMarkAsPaid,
+    required this.onDelete,
+  });
+
+  final TransactionListItem transaction;
+  final VoidCallback onEdit;
+  final VoidCallback onMarkAsPaid;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final amountColor = transaction.isIncome
+        ? AppColors.success
+        : transaction.isTransfer
+            ? AppColors.info
+            : colors.textPrimary;
+    final dueDate = _pendingReferenceDate(transaction);
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: transaction.iconColor.withValues(alpha: 0.12),
+        foregroundColor: transaction.iconColor,
+        child: Icon(transaction.icon, size: 20),
+      ),
+      title: Text(
+        transaction.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _QuickActionButton(
-            icon: Icons.add_rounded,
-            label: 'Receita',
-            color: AppColors.success,
-            onTap: () {},
+          Text(
+            _pendingSubtitle(transaction),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          _QuickActionButton(
-            icon: Icons.remove_rounded,
-            label: 'Despesa',
-            color: AppColors.danger,
-            onTap: () {},
+          if (_isOverdue(transaction)) ...[
+            const SizedBox(height: 3),
+            Text(
+              'Vencida',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ],
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TransactionAmountDate(
+            amount: CurrencyUtils.formatCents(transaction.amountCents),
+            date: _formatShortDate(dueDate),
+            prefix: _amountPrefix(transaction),
+            color: amountColor,
           ),
-          _QuickActionButton(
-            icon: Icons.credit_card_rounded,
-            label: 'Cartão',
-            color: AppColors.info,
-            onTap: () {},
-          ),
-          _QuickActionButton(
-            icon: Icons.savings_rounded,
-            label: 'Investir',
-            color: AppColors.warning,
-            onTap: onOpenInvestments,
+          PopupMenuButton<_PendingTransactionAction>(
+            tooltip: 'Opções',
+            onSelected: (action) {
+              switch (action) {
+                case _PendingTransactionAction.edit:
+                  onEdit();
+                  break;
+                case _PendingTransactionAction.markAsPaid:
+                  onMarkAsPaid();
+                  break;
+                case _PendingTransactionAction.delete:
+                  onDelete();
+                  break;
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _PendingTransactionAction.edit,
+                child: Text('Editar'),
+              ),
+              PopupMenuItem(
+                value: _PendingTransactionAction.markAsPaid,
+                child: Text('Efetivar'),
+              ),
+              PopupMenuItem(
+                value: _PendingTransactionAction.delete,
+                child: Text('Excluir'),
+              ),
+            ],
           ),
         ],
       ),
@@ -1215,58 +1681,100 @@ class _QuickActions extends StatelessWidget {
   }
 }
 
-class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+enum _PendingTransactionAction { edit, markAsPaid, delete }
 
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
+List<TransactionListItem> _currentMonthPendingTransactions(
+  TransactionsState state,
+) {
+  final now = DateTime.now();
+  final transactions = state.transactions.where((transaction) {
+    if (transaction.isPaid || transaction.isCreditCard) {
+      return false;
+    }
+    return _isSameMonth(_pendingReferenceDate(transaction), now);
+  }).toList()
+    ..sort((a, b) {
+      final dateCompare =
+          _pendingReferenceDate(a).compareTo(_pendingReferenceDate(b));
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+      return a.title.compareTo(b.title);
+    });
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
+  return transactions;
+}
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        width: 142,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 17,
-              backgroundColor: color,
-              foregroundColor: Colors.white,
-              child: Icon(icon, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.textPrimary,
-                    ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+int _pendingIncomeCents(List<TransactionListItem> transactions) {
+  return transactions
+      .where((transaction) => transaction.isIncome)
+      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+}
+
+int _pendingExpenseCents(List<TransactionListItem> transactions) {
+  return transactions
+      .where(
+        (transaction) => transaction.isExpense && !transaction.isCreditCard,
+      )
+      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+}
+
+int _pendingTransferCents(List<TransactionListItem> transactions) {
+  return transactions
+      .where((transaction) => transaction.isTransfer)
+      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+}
+
+int _pendingTotalCents(List<TransactionListItem> transactions) {
+  return transactions.fold<int>(
+    0,
+    (total, transaction) => total + transaction.amountCents,
+  );
+}
+
+DateTime _pendingReferenceDate(TransactionListItem transaction) {
+  return transaction.dueDate ?? transaction.date;
+}
+
+bool _isSameMonth(DateTime left, DateTime right) {
+  return left.month == right.month && left.year == right.year;
+}
+
+bool _isOverdue(TransactionListItem transaction) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final dueDate = _pendingReferenceDate(transaction);
+  final dueDay = DateTime(dueDate.year, dueDate.month, dueDate.day);
+  return dueDay.isBefore(today);
+}
+
+String _pendingSubtitle(TransactionListItem transaction) {
+  if (transaction.isTransfer) {
+    return '${transaction.accountName} -> ${transaction.toAccountName ?? 'Conta removida'}';
   }
+
+  final category = transaction.subcategoryName == null
+      ? transaction.categoryName
+      : '${transaction.categoryName} · ${transaction.subcategoryName}';
+  return '$category · ${transaction.accountName}';
+}
+
+String _amountPrefix(TransactionListItem transaction) {
+  if (transaction.isIncome) {
+    return '+ ';
+  }
+  if (transaction.isTransfer) {
+    return '';
+  }
+  return '- ';
+}
+
+String _amountWithPrefix(TransactionListItem transaction) {
+  return '${_amountPrefix(transaction)}${CurrencyUtils.formatCents(transaction.amountCents)}';
+}
+
+String _formatShortDate(DateTime date) {
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
 }
 
 class _SectionAction extends StatelessWidget {
