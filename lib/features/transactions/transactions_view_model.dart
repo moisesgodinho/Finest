@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_utils.dart';
@@ -11,6 +13,7 @@ import '../../data/models/account_preview.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/create_transaction_request.dart';
 import '../../data/models/subcategory_model.dart';
+import '../../data/models/transaction_series_scope.dart';
 import '../../data/models/update_transaction_request.dart';
 import '../../data/models/update_transfer_request.dart';
 import '../../data/repositories/account_repository.dart';
@@ -40,6 +43,7 @@ class TransactionListItem {
     required this.accountName,
     required this.categoryName,
     required this.amountCents,
+    required this.currencyCode,
     required this.date,
     required this.monthReference,
     required this.dueDate,
@@ -64,6 +68,7 @@ class TransactionListItem {
     this.kindLabel,
     this.installmentNumber,
     this.totalInstallments,
+    this.consolidatedAmountCents,
   });
 
   final int id;
@@ -81,6 +86,8 @@ class TransactionListItem {
   final int? toAccountId;
   final String? toAccountName;
   final int amountCents;
+  final String currencyCode;
+  final int? consolidatedAmountCents;
   final DateTime date;
   final DateTime monthReference;
   final DateTime? dueDate;
@@ -101,6 +108,12 @@ class TransactionListItem {
   bool get isExpense => type == TransactionFilters.expense;
   bool get isTransfer => kind == TransactionEntryKind.transfer;
   bool get isCreditCard => paymentMethod == TransactionFilters.creditCard;
+  bool get isInstallmentSeries =>
+      kindCode == 'installment' &&
+      (installmentNumber ?? 0) > 0 &&
+      (totalInstallments ?? 0) > 1;
+  bool get supportsSeriesScope => isInstallmentSeries;
+  int get summaryAmountCents => consolidatedAmountCents ?? amountCents;
 }
 
 enum TransactionEntryKind {
@@ -155,6 +168,7 @@ class TransactionsState {
     this.selectedCategoryId,
     this.selectedCreditCardId,
     this.searchQuery = '',
+    this.currencyCode = 'BRL',
     this.transactions = const [],
     this.accounts = const [],
     this.categories = const [],
@@ -179,6 +193,7 @@ class TransactionsState {
   final int? selectedCategoryId;
   final int? selectedCreditCardId;
   final String searchQuery;
+  final String currencyCode;
   final List<TransactionListItem> transactions;
   final List<AccountPreview> accounts;
   final List<CategoryModel> categories;
@@ -284,6 +299,7 @@ class TransactionsState {
     Object? selectedCategoryId = _unset,
     Object? selectedCreditCardId = _unset,
     String? searchQuery,
+    String? currencyCode,
     List<TransactionListItem>? transactions,
     List<AccountPreview>? accounts,
     List<CategoryModel>? categories,
@@ -307,6 +323,7 @@ class TransactionsState {
           ? this.selectedCreditCardId
           : selectedCreditCardId as int?,
       searchQuery: searchQuery ?? this.searchQuery,
+      currencyCode: currencyCode ?? this.currencyCode,
       transactions: transactions ?? this.transactions,
       accounts: accounts ?? this.accounts,
       categories: categories ?? this.categories,
@@ -355,12 +372,16 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     required CreditCardRepository creditCardRepository,
     required TransactionRepository transactionRepository,
     required TransferRepository transferRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
   })  : _userId = userId,
         _accountRepository = accountRepository,
         _categoryRepository = categoryRepository,
         _creditCardRepository = creditCardRepository,
         _transactionRepository = transactionRepository,
         _transferRepository = transferRepository,
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
         super(TransactionsState.initial()) {
     _watchData();
   }
@@ -371,6 +392,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
   final CreditCardRepository _creditCardRepository;
   final TransactionRepository _transactionRepository;
   final TransferRepository _transferRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<SubcategoryModel>>? _subcategoriesSubscription;
@@ -513,29 +536,59 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     int? subcategoryId,
     String? transactionKind,
     int? totalInstallments,
+    TransactionSeriesScope scope = TransactionSeriesScope.current,
   }) async {
     final userId = _requireUserId();
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _transactionRepository.updateTransaction(
-        UpdateTransactionRequest(
-          userId: userId,
-          transactionId: transaction.id,
-          accountId: accountId,
-          categoryId: categoryId,
-          subcategoryId: subcategoryId,
-          type: type,
-          description: description,
-          amountCents: amountCents,
-          date: date,
-          dueDate: dueDate,
-          transactionKind: transactionKind,
-          installmentNumber: transaction.installmentNumber,
-          totalInstallments: totalInstallments,
-          isPaid: isPaid,
-        ),
+      final targets = _transactionTargetsFor(transaction, scope);
+      final useInstallmentSuffix = targets.any(
+        (target) => _hasInstallmentSuffix(target.description),
       );
+
+      for (final target in targets) {
+        final keepsInstallments = transactionKind == 'installment';
+        final effectiveInstallmentNumber =
+            keepsInstallments ? target.installmentNumber : null;
+        final effectiveTotalInstallments = keepsInstallments
+            ? totalInstallments ?? target.totalInstallments
+            : null;
+
+        await _transactionRepository.updateTransaction(
+          UpdateTransactionRequest(
+            userId: userId,
+            transactionId: target.id,
+            accountId: accountId,
+            categoryId: categoryId,
+            subcategoryId: subcategoryId,
+            type: type,
+            description: _seriesDescription(
+              description,
+              installmentNumber: effectiveInstallmentNumber,
+              totalInstallments: effectiveTotalInstallments,
+              useSuffix: keepsInstallments && useInstallmentSuffix,
+            ),
+            amountCents: amountCents,
+            date: _shiftDateForSeries(
+              date,
+              selectedInstallment: transaction.installmentNumber,
+              targetInstallment: effectiveInstallmentNumber,
+            ),
+            dueDate: dueDate == null
+                ? null
+                : _shiftDateForSeries(
+                    dueDate,
+                    selectedInstallment: transaction.installmentNumber,
+                    targetInstallment: effectiveInstallmentNumber,
+                  ),
+            transactionKind: transactionKind,
+            installmentNumber: effectiveInstallmentNumber,
+            totalInstallments: effectiveTotalInstallments,
+            isPaid: isPaid,
+          ),
+        );
+      }
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -556,50 +609,54 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     required bool isPaid,
     required DateTime date,
     int? totalInstallments,
+    TransactionSeriesScope scope = TransactionSeriesScope.current,
   }) async {
     final userId = _requireUserId();
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _transferRepository.updateTransfer(
-        UpdateTransferRequest(
-          userId: userId,
-          transferId: transfer.id,
-          fromAccountId: fromAccountId,
-          toAccountId: toAccountId,
-          name: name,
-          amountCents: amountCents,
-          transferKind: transferKind,
-          dueDate: dueDate,
-          isPaid: isPaid,
-          date: date,
-          installmentNumber: transfer.installmentNumber,
-          totalInstallments: totalInstallments,
-        ),
+      final targets = _transferTargetsFor(transfer, scope);
+      final useInstallmentSuffix = targets.any(
+        (target) => _hasInstallmentSuffix(target.name),
       );
-    } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
-      rethrow;
-    }
-  }
 
-  Future<void> deleteItem(TransactionListItem transaction) async {
-    final userId = _requireUserId();
-    state = state.copyWith(isLoading: true, clearError: true);
+      for (final target in targets) {
+        final keepsInstallments = transferKind == 'installment';
+        final effectiveInstallmentNumber =
+            keepsInstallments ? target.installmentNumber : null;
+        final effectiveTotalInstallments = keepsInstallments
+            ? totalInstallments ?? target.totalInstallments
+            : null;
 
-    try {
-      if (transaction.isTransfer) {
-        await _transferRepository.deleteTransfer(
-          userId: userId,
-          transferId: transaction.id,
-        );
-      } else {
-        await _transactionRepository.deleteTransaction(
-          userId: userId,
-          transactionId: transaction.id,
+        await _transferRepository.updateTransfer(
+          UpdateTransferRequest(
+            userId: userId,
+            transferId: target.id,
+            fromAccountId: fromAccountId,
+            toAccountId: toAccountId,
+            name: _seriesDescription(
+              name,
+              installmentNumber: effectiveInstallmentNumber,
+              totalInstallments: effectiveTotalInstallments,
+              useSuffix: keepsInstallments && useInstallmentSuffix,
+            ),
+            amountCents: amountCents,
+            toAmountCents: amountCents,
+            transferKind: transferKind,
+            dueDate: _shiftDateForSeries(
+              dueDate,
+              selectedInstallment: transfer.installmentNumber,
+              targetInstallment: effectiveInstallmentNumber,
+            ),
+            isPaid: isPaid,
+            date: _shiftDateForSeries(
+              date,
+              selectedInstallment: transfer.installmentNumber,
+              targetInstallment: effectiveInstallmentNumber,
+            ),
+            installmentNumber: effectiveInstallmentNumber,
+            totalInstallments: effectiveTotalInstallments,
+          ),
         );
       }
     } catch (error) {
@@ -609,6 +666,228 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       );
       rethrow;
     }
+  }
+
+  Future<void> deleteItem(
+    TransactionListItem transaction, {
+    TransactionSeriesScope scope = TransactionSeriesScope.current,
+  }) async {
+    final userId = _requireUserId();
+    state = state.copyWith(isLoading: true, clearError: true);
+
+    try {
+      if (transaction.isTransfer) {
+        final targets = _transferTargetsFor(transaction, scope);
+        for (final target in targets) {
+          await _transferRepository.deleteTransfer(
+            userId: userId,
+            transferId: target.id,
+          );
+        }
+      } else {
+        final targets = _transactionTargetsFor(transaction, scope);
+        for (final target in targets) {
+          await _transactionRepository.deleteTransaction(
+            userId: userId,
+            transactionId: target.id,
+          );
+        }
+      }
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  List<FinanceTransaction> _transactionTargetsFor(
+    TransactionListItem selected,
+    TransactionSeriesScope scope,
+  ) {
+    final selectedRaw = _rawTransactions
+        .where((transaction) => transaction.id == selected.id)
+        .firstOrNull;
+    if (selectedRaw == null) {
+      return const [];
+    }
+    if (scope == TransactionSeriesScope.current ||
+        !selected.supportsSeriesScope) {
+      return [selectedRaw];
+    }
+
+    final matches = _rawTransactions
+        .where((transaction) =>
+            _matchesTransactionSeries(transaction, selectedRaw))
+        .where(
+          (transaction) => _matchesInstallmentScope(
+            targetInstallment: transaction.installmentNumber,
+            selectedInstallment: selectedRaw.installmentNumber,
+            scope: scope,
+          ),
+        )
+        .toList()
+      ..sort(_compareInstallmentTransactions);
+
+    return matches.isEmpty ? [selectedRaw] : matches;
+  }
+
+  List<AccountTransfer> _transferTargetsFor(
+    TransactionListItem selected,
+    TransactionSeriesScope scope,
+  ) {
+    final selectedRaw = _rawTransfers
+        .where((transfer) => transfer.id == selected.id)
+        .firstOrNull;
+    if (selectedRaw == null) {
+      return const [];
+    }
+    if (scope == TransactionSeriesScope.current ||
+        !selected.supportsSeriesScope) {
+      return [selectedRaw];
+    }
+
+    final matches = _rawTransfers
+        .where((transfer) => _matchesTransferSeries(transfer, selectedRaw))
+        .where(
+          (transfer) => _matchesInstallmentScope(
+            targetInstallment: transfer.installmentNumber,
+            selectedInstallment: selectedRaw.installmentNumber,
+            scope: scope,
+          ),
+        )
+        .toList()
+      ..sort(_compareInstallmentTransfers);
+
+    return matches.isEmpty ? [selectedRaw] : matches;
+  }
+
+  bool _matchesTransactionSeries(
+    FinanceTransaction candidate,
+    FinanceTransaction selected,
+  ) {
+    return candidate.userId == selected.userId &&
+        candidate.paymentMethod == selected.paymentMethod &&
+        candidate.creditCardId == selected.creditCardId &&
+        candidate.accountId == selected.accountId &&
+        candidate.categoryId == selected.categoryId &&
+        candidate.subcategoryId == selected.subcategoryId &&
+        candidate.type == selected.type &&
+        candidate.expenseKind == selected.expenseKind &&
+        candidate.totalInstallments == selected.totalInstallments &&
+        _seriesBaseName(candidate.description) ==
+            _seriesBaseName(selected.description);
+  }
+
+  bool _matchesTransferSeries(
+    AccountTransfer candidate,
+    AccountTransfer selected,
+  ) {
+    return candidate.userId == selected.userId &&
+        candidate.fromAccountId == selected.fromAccountId &&
+        candidate.toAccountId == selected.toAccountId &&
+        candidate.transferKind == selected.transferKind &&
+        candidate.totalInstallments == selected.totalInstallments &&
+        _seriesBaseName(candidate.name) == _seriesBaseName(selected.name);
+  }
+
+  bool _matchesInstallmentScope({
+    required int? targetInstallment,
+    required int? selectedInstallment,
+    required TransactionSeriesScope scope,
+  }) {
+    if (scope == TransactionSeriesScope.all) {
+      return true;
+    }
+    if (scope == TransactionSeriesScope.current) {
+      return targetInstallment == selectedInstallment;
+    }
+
+    return (targetInstallment ?? 0) >= (selectedInstallment ?? 0);
+  }
+
+  int _compareInstallmentTransactions(
+    FinanceTransaction left,
+    FinanceTransaction right,
+  ) {
+    final installmentCompare =
+        (left.installmentNumber ?? 0).compareTo(right.installmentNumber ?? 0);
+    if (installmentCompare != 0) {
+      return installmentCompare;
+    }
+    return left.date.compareTo(right.date);
+  }
+
+  int _compareInstallmentTransfers(
+    AccountTransfer left,
+    AccountTransfer right,
+  ) {
+    final installmentCompare =
+        (left.installmentNumber ?? 0).compareTo(right.installmentNumber ?? 0);
+    if (installmentCompare != 0) {
+      return installmentCompare;
+    }
+    return left.date.compareTo(right.date);
+  }
+
+  DateTime _shiftDateForSeries(
+    DateTime date, {
+    required int? selectedInstallment,
+    required int? targetInstallment,
+  }) {
+    final selected = selectedInstallment ?? targetInstallment ?? 1;
+    final target = targetInstallment ?? selected;
+    return _addMonths(date, target - selected);
+  }
+
+  DateTime _addMonths(DateTime date, int months) {
+    if (months == 0) {
+      return date;
+    }
+
+    final firstDayOfTargetMonth = DateTime(date.year, date.month + months);
+    final lastDayOfTargetMonth = DateTime(
+      firstDayOfTargetMonth.year,
+      firstDayOfTargetMonth.month + 1,
+      0,
+    ).day;
+    final day = date.day.clamp(1, lastDayOfTargetMonth).toInt();
+
+    return DateTime(
+      firstDayOfTargetMonth.year,
+      firstDayOfTargetMonth.month,
+      day,
+      date.hour,
+      date.minute,
+      date.second,
+      date.millisecond,
+      date.microsecond,
+    );
+  }
+
+  String _seriesDescription(
+    String value, {
+    required int? installmentNumber,
+    required int? totalInstallments,
+    required bool useSuffix,
+  }) {
+    final baseName = _seriesBaseName(value);
+    if (!useSuffix || installmentNumber == null || totalInstallments == null) {
+      return baseName;
+    }
+    return '$baseName ($installmentNumber/$totalInstallments)';
+  }
+
+  String _seriesBaseName(String value) {
+    return value.trim().replaceFirst(
+          RegExp(r'\s*\(\d+/\d+\)\s*$'),
+          '',
+        );
+  }
+
+  bool _hasInstallmentSuffix(String value) {
+    return RegExp(r'\(\d+/\d+\)\s*$').hasMatch(value.trim());
   }
 
   void _watchData() {
@@ -672,7 +951,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     );
   }
 
-  void _publishState() {
+  Future<void> _publishState() async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
     final accounts = _rawAccounts.map(_mapAccount).toList();
     final accountNames = {
       for (final account in _rawAccounts) account.id: account.name,
@@ -695,9 +975,14 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
           categoryMap: categoryMap,
           subcategoryMap: subcategoryMap,
           creditCardMap: creditCardMap,
+          ratesToBrl: ratesToBrl,
         ),
       for (final transfer in _rawTransfers)
-        _mapTransfer(transfer, accountNames: accountNames),
+        _mapTransfer(
+          transfer,
+          accountNames: accountNames,
+          ratesToBrl: ratesToBrl,
+        ),
     ]..sort((a, b) {
         final monthCompare = b.monthReference.compareTo(a.monthReference);
         if (monthCompare != 0) {
@@ -729,6 +1014,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       accounts: accounts,
       categories: _rawCategories,
       subcategories: _rawSubcategories,
+      currencyCode: _currencyCode,
       creditCards: [
         for (final card in _rawCreditCards)
           TransactionFilterOption(
@@ -756,19 +1042,20 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       }
 
       if (!entry.isPaid) {
-        pendingCents += entry.amountCents;
+        pendingCents += entry.summaryAmountCents;
         continue;
       }
 
       if (entry.isTransfer) {
-        transferCents += entry.amountCents;
+        transferCents += entry.summaryAmountCents;
       } else if (entry.isCreditCard) {
-        cardExpenseCents +=
-            entry.isIncome ? -entry.amountCents : entry.amountCents;
+        cardExpenseCents += entry.isIncome
+            ? -entry.summaryAmountCents
+            : entry.summaryAmountCents;
       } else if (entry.isIncome) {
-        incomeCents += entry.amountCents;
+        incomeCents += entry.summaryAmountCents;
       } else {
-        accountExpenseCents += entry.amountCents;
+        accountExpenseCents += entry.summaryAmountCents;
       }
     }
 
@@ -794,6 +1081,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     required Map<int, CategoryModel> categoryMap,
     required Map<int, SubcategoryModel> subcategoryMap,
     required Map<int, CreditCard> creditCardMap,
+    required Map<String, double> ratesToBrl,
   }) {
     final category = categoryMap[transaction.categoryId];
     final subcategory = subcategoryMap[transaction.subcategoryId];
@@ -821,6 +1109,12 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
           ? null
           : '${creditCard.name} •••• ${creditCard.lastDigits}',
       amountCents: transaction.amount,
+      currencyCode: transaction.currencyCode,
+      consolidatedAmountCents: _convertCents(
+        amountCents: transaction.amount,
+        fromCurrency: transaction.currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       date: transaction.date,
       monthReference: monthReference,
       dueDate: transaction.dueDate,
@@ -842,6 +1136,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
   TransactionListItem _mapTransfer(
     AccountTransfer transfer, {
     required Map<int, String> accountNames,
+    required Map<String, double> ratesToBrl,
   }) {
     return TransactionListItem(
       id: transfer.id,
@@ -853,6 +1148,12 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       toAccountName: accountNames[transfer.toAccountId] ?? 'Conta removida',
       categoryName: 'Transferência',
       amountCents: transfer.amount,
+      currencyCode: transfer.fromCurrencyCode,
+      consolidatedAmountCents: _convertCents(
+        amountCents: transfer.amount,
+        fromCurrency: transfer.fromCurrencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       date: transfer.date,
       monthReference: DateTime(transfer.date.year, transfer.date.month),
       dueDate: transfer.dueDate,
@@ -877,6 +1178,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      currencyCode: account.currencyCode,
       includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,
@@ -898,6 +1200,19 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     final normalized = value.replaceFirst('#', '');
     final parsed = int.tryParse('FF$normalized', radix: 16);
     return parsed == null ? AppColors.primary : Color(parsed);
+  }
+
+  int _convertCents({
+    required int amountCents,
+    required String fromCurrency,
+    required Map<String, double> ratesToBrl,
+  }) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: amountCents,
+      fromCurrency: fromCurrency,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
   }
 
   int _requireUserId() {
@@ -941,5 +1256,7 @@ final transactionsViewModelProvider =
     creditCardRepository: ref.watch(creditCardRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
     transferRepository: ref.watch(transferRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
   );
 });

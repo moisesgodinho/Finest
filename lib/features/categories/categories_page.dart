@@ -60,11 +60,15 @@ class CategoriesPage extends ConsumerWidget {
               onNext: viewModel.selectNextMonth,
             ),
             const SizedBox(height: 14),
-            _CategoryReportHeader(summary: state.reportSummary),
+            _CategoryReportHeader(
+              summary: state.reportSummary,
+              currencyCode: state.currencyCode,
+            ),
             const SizedBox(height: 14),
             _CategoryReportCard(
               items: state.reportItems,
               summary: state.reportSummary,
+              currencyCode: state.currencyCode,
             ),
             const SizedBox(height: 18),
             SectionCard(
@@ -355,9 +359,13 @@ class _MonthSelector extends StatelessWidget {
 }
 
 class _CategoryReportHeader extends StatelessWidget {
-  const _CategoryReportHeader({required this.summary});
+  const _CategoryReportHeader({
+    required this.summary,
+    required this.currencyCode,
+  });
 
   final CategoryReportSummary summary;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -371,7 +379,10 @@ class _CategoryReportHeader extends StatelessWidget {
                 child: _ReportMetric(
                   icon: Icons.pie_chart_rounded,
                   label: 'Total gasto',
-                  value: CurrencyUtils.formatCents(summary.totalExpenseCents),
+                  value: CurrencyUtils.formatCents(
+                    summary.totalExpenseCents,
+                    currencyCode: currencyCode,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -391,7 +402,10 @@ class _CategoryReportHeader extends StatelessWidget {
                 child: _ReportMetric(
                   icon: Icons.check_circle_rounded,
                   label: 'Efetivado',
-                  value: CurrencyUtils.formatCents(summary.paidExpenseCents),
+                  value: CurrencyUtils.formatCents(
+                    summary.paidExpenseCents,
+                    currencyCode: currencyCode,
+                  ),
                   tone: AppColors.success,
                 ),
               ),
@@ -402,6 +416,7 @@ class _CategoryReportHeader extends StatelessWidget {
                   label: 'Previsto',
                   value: CurrencyUtils.formatCents(
                     summary.pendingExpenseCents,
+                    currencyCode: currencyCode,
                   ),
                   tone: AppColors.warning,
                 ),
@@ -516,10 +531,12 @@ class _CategoryReportCard extends StatelessWidget {
   const _CategoryReportCard({
     required this.items,
     required this.summary,
+    required this.currencyCode,
   });
 
   final List<CategoryReportItem> items;
   final CategoryReportSummary summary;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -537,7 +554,10 @@ class _CategoryReportCard extends StatelessWidget {
           : Column(
               children: [
                 for (final item in items) ...[
-                  _CategoryReportTile(item: item),
+                  _CategoryReportTile(
+                    item: item,
+                    currencyCode: currencyCode,
+                  ),
                   if (item != items.last)
                     Divider(height: 18, color: context.colors.border),
                 ],
@@ -548,9 +568,13 @@ class _CategoryReportCard extends StatelessWidget {
 }
 
 class _CategoryReportTile extends StatelessWidget {
-  const _CategoryReportTile({required this.item});
+  const _CategoryReportTile({
+    required this.item,
+    required this.currencyCode,
+  });
 
   final CategoryReportItem item;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -577,7 +601,10 @@ class _CategoryReportTile extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              CurrencyUtils.formatCents(item.totalCents),
+              CurrencyUtils.formatCents(
+                item.totalCents,
+                currencyCode: currencyCode,
+              ),
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ],
@@ -613,12 +640,16 @@ class _CategoryReportTile extends StatelessWidget {
           ),
         ),
         children: [
-          _PaidPendingBreakdown(item: item),
+          _PaidPendingBreakdown(
+            item: item,
+            currencyCode: currencyCode,
+          ),
           const SizedBox(height: 10),
           for (final subcategory in item.subcategories) ...[
             _SubcategoryBreakdownRow(
               subcategory: subcategory,
               color: item.category.color,
+              currencyCode: currencyCode,
             ),
             if (subcategory != item.subcategories.last)
               const SizedBox(height: 10),
@@ -630,9 +661,13 @@ class _CategoryReportTile extends StatelessWidget {
 }
 
 class _PaidPendingBreakdown extends StatelessWidget {
-  const _PaidPendingBreakdown({required this.item});
+  const _PaidPendingBreakdown({
+    required this.item,
+    required this.currencyCode,
+  });
 
   final CategoryReportItem item;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -641,7 +676,10 @@ class _PaidPendingBreakdown extends StatelessWidget {
         Expanded(
           child: _MiniBreakdownPill(
             label: 'Efetivado',
-            value: CurrencyUtils.formatCents(item.paidCents),
+            value: CurrencyUtils.formatCents(
+              item.paidCents,
+              currencyCode: currencyCode,
+            ),
             color: AppColors.success,
           ),
         ),
@@ -649,7 +687,10 @@ class _PaidPendingBreakdown extends StatelessWidget {
         Expanded(
           child: _MiniBreakdownPill(
             label: 'Previsto',
-            value: CurrencyUtils.formatCents(item.pendingCents),
+            value: CurrencyUtils.formatCents(
+              item.pendingCents,
+              currencyCode: currencyCode,
+            ),
             color: AppColors.warning,
           ),
         ),
@@ -707,10 +748,12 @@ class _SubcategoryBreakdownRow extends StatelessWidget {
   const _SubcategoryBreakdownRow({
     required this.subcategory,
     required this.color,
+    required this.currencyCode,
   });
 
   final SubcategoryReportItem subcategory;
   final Color color;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -733,7 +776,10 @@ class _SubcategoryBreakdownRow extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    CurrencyUtils.formatCents(subcategory.totalCents),
+                    CurrencyUtils.formatCents(
+                      subcategory.totalCents,
+                      currencyCode: currencyCode,
+                    ),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],

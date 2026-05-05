@@ -25,6 +25,12 @@ class Transfers extends Table {
       )();
   TextColumn get name => text().withLength(min: 1, max: 160)();
   IntColumn get amount => integer()();
+  IntColumn get convertedAmount => integer().nullable()();
+  TextColumn get fromCurrencyCode =>
+      text().withLength(min: 3, max: 3).withDefault(const Constant('BRL'))();
+  TextColumn get toCurrencyCode =>
+      text().withLength(min: 3, max: 3).withDefault(const Constant('BRL'))();
+  RealColumn get exchangeRate => real().nullable()();
   TextColumn get transferKind => text().withLength(min: 1, max: 30)();
   DateTimeColumn get dueDate => dateTime()();
   BoolColumn get isPaid => boolean().withDefault(const Constant(true))();

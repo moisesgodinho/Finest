@@ -14,6 +14,8 @@ class Accounts extends Table {
   TextColumn get bankName => text().nullable()();
   IntColumn get initialBalance => integer().withDefault(const Constant(0))();
   IntColumn get currentBalance => integer().withDefault(const Constant(0))();
+  TextColumn get currencyCode =>
+      text().withLength(min: 3, max: 3).withDefault(const Constant('BRL'))();
   IntColumn get emergencyReserveTarget => integer().nullable()();
   BoolColumn get includeInTotalBalance =>
       boolean().withDefault(const Constant(true))();

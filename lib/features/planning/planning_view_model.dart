@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_utils.dart';
@@ -58,6 +60,7 @@ class PlanningState {
     required this.upcomingBillsCents,
     required this.budgets,
     required this.upcomingBills,
+    this.currencyCode = 'BRL',
     this.hasPlan = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -89,6 +92,7 @@ class PlanningState {
   final int upcomingBillsCents;
   final List<BudgetLimitPreview> budgets;
   final List<PlannedBillPreview> upcomingBills;
+  final String currencyCode;
   final bool hasPlan;
   final bool isLoading;
   final bool isSaving;
@@ -123,6 +127,7 @@ class PlanningState {
     int? upcomingBillsCents,
     List<BudgetLimitPreview>? budgets,
     List<PlannedBillPreview>? upcomingBills,
+    String? currencyCode,
     bool? hasPlan,
     bool? isLoading,
     bool? isSaving,
@@ -140,6 +145,7 @@ class PlanningState {
       upcomingBillsCents: upcomingBillsCents ?? this.upcomingBillsCents,
       budgets: budgets ?? this.budgets,
       upcomingBills: upcomingBills ?? this.upcomingBills,
+      currencyCode: currencyCode ?? this.currencyCode,
       hasPlan: hasPlan ?? this.hasPlan,
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
@@ -155,11 +161,15 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
     required CreditCardRepository creditCardRepository,
     required MonthlyPlanRepository monthlyPlanRepository,
     required TransactionRepository transactionRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
   })  : _userId = userId,
         _categoryRepository = categoryRepository,
         _creditCardRepository = creditCardRepository,
         _monthlyPlanRepository = monthlyPlanRepository,
         _transactionRepository = transactionRepository,
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
         super(PlanningState.initial()) {
     _watchData();
   }
@@ -169,6 +179,8 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
   final CreditCardRepository _creditCardRepository;
   final MonthlyPlanRepository _monthlyPlanRepository;
   final TransactionRepository _transactionRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
 
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<CreditCard>>? _creditCardsSubscription;
@@ -303,7 +315,8 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
     );
   }
 
-  void _publishState() {
+  Future<void> _publishState() async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
     final firstDay = AppDateUtils.firstDayOfMonth(state.selectedMonth);
     final lastDay = AppDateUtils.lastDayOfMonth(state.selectedMonth);
     final monthTransactions = _transactions.where((transaction) {
@@ -318,15 +331,24 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
               transaction.type == 'income' &&
               transaction.paymentMethod != 'credit_card',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final currentExpenseCents = monthTransactions
         .where((transaction) => transaction.type == 'expense')
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final plan = _monthlyPlan;
     final plannedExpenseCents = plan?.plannedExpense ?? 0;
-    final upcomingBills = _buildUpcomingBills(monthTransactions);
+    final upcomingBills = _buildUpcomingBills(monthTransactions, ratesToBrl);
 
     state = state.copyWith(
+      currencyCode: _currencyCode,
       plannedIncomeCents: plan?.plannedIncome ?? 0,
       plannedExpenseCents: plannedExpenseCents,
       initialMonthBalanceCents: plan?.initialMonthBalance ?? 0,
@@ -335,6 +357,7 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
       upcomingBillsCents: _upcomingBillsTotal(upcomingBills),
       budgets: _buildBudgetPreviews(
         monthTransactions,
+        ratesToBrl: ratesToBrl,
         plannedExpenseCents: plannedExpenseCents,
       ),
       upcomingBills: upcomingBills,
@@ -353,6 +376,7 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
 
   List<BudgetLimitPreview> _buildBudgetPreviews(
     List<FinanceTransaction> monthTransactions, {
+    required Map<String, double> ratesToBrl,
     required int plannedExpenseCents,
   }) {
     final expenseCategories = {
@@ -366,10 +390,11 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
       if (transaction.type != 'expense') {
         continue;
       }
+      final amountCents = _convertTransactionAmount(transaction, ratesToBrl);
       totalsByCategory.update(
         transaction.categoryId,
-        (value) => value + transaction.amount,
-        ifAbsent: () => transaction.amount,
+        (value) => value + amountCents,
+        ifAbsent: () => amountCents,
       );
     }
 
@@ -406,6 +431,7 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
 
   List<PlannedBillPreview> _buildUpcomingBills(
     List<FinanceTransaction> monthTransactions,
+    Map<String, double> ratesToBrl,
   ) {
     final bills = <PlannedBillPreview>[];
 
@@ -421,7 +447,7 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
         PlannedBillPreview(
           name: transaction.description,
           dueLabel: 'Vencimento: ${_shortDate(dueDate)}',
-          amountCents: transaction.amount,
+          amountCents: _convertTransactionAmount(transaction, ratesToBrl),
           icon: Icons.event_available_rounded,
           dueDate: dueDate,
         ),
@@ -448,7 +474,8 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
           .toList();
       final transactionTotal = invoiceTransactions.fold<int>(
         0,
-        (total, transaction) => total + _invoiceAmountDelta(transaction),
+        (total, transaction) =>
+            total + _invoiceAmountDelta(transaction, ratesToBrl),
       );
       final amount = invoiceTransactions.isNotEmpty
           ? transactionTotal.clamp(0, 1 << 31).toInt()
@@ -503,10 +530,24 @@ class PlanningViewModel extends StateNotifier<PlanningState> {
     return transaction.dueDate ?? transaction.date;
   }
 
-  int _invoiceAmountDelta(FinanceTransaction transaction) {
-    return transaction.type == 'income'
-        ? -transaction.amount
-        : transaction.amount;
+  int _invoiceAmountDelta(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    final amountCents = _convertTransactionAmount(transaction, ratesToBrl);
+    return transaction.type == 'income' ? -amountCents : amountCents;
+  }
+
+  int _convertTransactionAmount(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: transaction.amount,
+      fromCurrency: transaction.currencyCode,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
   }
 
   DateTime _creditCardDueDate({
@@ -586,5 +627,7 @@ final planningViewModelProvider =
     creditCardRepository: ref.watch(creditCardRepositoryProvider),
     monthlyPlanRepository: ref.watch(monthlyPlanRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
   );
 });

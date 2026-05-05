@@ -31,7 +31,7 @@ class LocalAuthService implements AuthService {
   })  : _userRepository = userRepository,
         _categoryRepository = categoryRepository;
 
-  static const sessionUserIdKey = 'finance_pet.session_user_id';
+  static const sessionUserIdKey = 'finest.session_user_id';
 
   final UserRepository _userRepository;
   final CategoryRepository _categoryRepository;

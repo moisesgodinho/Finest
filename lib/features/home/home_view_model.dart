@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_utils.dart';
@@ -20,6 +22,7 @@ class HomeState {
   const HomeState({
     required this.userName,
     required this.monthLabel,
+    required this.currencyCode,
     required this.currentBalanceCents,
     required this.projectedBalanceCents,
     required this.initialMonthBalanceCents,
@@ -38,6 +41,7 @@ class HomeState {
     return HomeState(
       userName: userName,
       monthLabel: AppDateUtils.monthYearLabel(DateTime.now()),
+      currencyCode: 'BRL',
       currentBalanceCents: 0,
       projectedBalanceCents: 0,
       initialMonthBalanceCents: 0,
@@ -68,6 +72,7 @@ class HomeState {
 
   final String userName;
   final String monthLabel;
+  final String currencyCode;
   final int currentBalanceCents;
   final int projectedBalanceCents;
   final int initialMonthBalanceCents;
@@ -134,6 +139,7 @@ class HomeState {
 
   HomeState copyWith({
     int? currentBalanceCents,
+    String? currencyCode,
     int? projectedBalanceCents,
     int? initialMonthBalanceCents,
     int? incomeCents,
@@ -149,6 +155,7 @@ class HomeState {
     return HomeState(
       userName: userName,
       monthLabel: monthLabel,
+      currencyCode: currencyCode ?? this.currencyCode,
       currentBalanceCents: currentBalanceCents ?? this.currentBalanceCents,
       projectedBalanceCents:
           projectedBalanceCents ?? this.projectedBalanceCents,
@@ -176,12 +183,18 @@ class HomeViewModel extends StateNotifier<HomeState> {
     required CategoryRepository categoryRepository,
     required CreditCardRepository creditCardRepository,
     required TransactionRepository transactionRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
   })  : _userId = userId,
         _accountRepository = accountRepository,
         _categoryRepository = categoryRepository,
         _creditCardRepository = creditCardRepository,
         _transactionRepository = transactionRepository,
-        super(HomeState.initial(userName: userName)) {
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
+        super(HomeState.initial(userName: userName).copyWith(
+          currencyCode: currencyCode,
+        )) {
     _watchData();
   }
 
@@ -190,6 +203,8 @@ class HomeViewModel extends StateNotifier<HomeState> {
   final CategoryRepository _categoryRepository;
   final CreditCardRepository _creditCardRepository;
   final TransactionRepository _transactionRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<CreditCard>>? _creditCardsSubscription;
@@ -250,7 +265,8 @@ class HomeViewModel extends StateNotifier<HomeState> {
     );
   }
 
-  void _publishState() {
+  Future<void> _publishState() async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
     final now = DateTime.now();
     final firstDay = AppDateUtils.firstDayOfMonth(now);
     final lastDay = AppDateUtils.lastDayOfMonth(now);
@@ -266,10 +282,18 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.type == 'income' &&
               transaction.paymentMethod != 'credit_card',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final expenseCents = monthTransactions
         .where((transaction) => transaction.type == 'expense')
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final paidAccountIncomeCents = monthTransactions
         .where(
           (transaction) =>
@@ -277,7 +301,11 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.paymentMethod != 'credit_card' &&
               transaction.type == 'income',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final paidAccountExpenseCents = monthTransactions
         .where(
           (transaction) =>
@@ -285,7 +313,11 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.paymentMethod != 'credit_card' &&
               transaction.type == 'expense',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final pendingIncomeCents = monthTransactions
         .where(
           (transaction) =>
@@ -293,7 +325,11 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.paymentMethod != 'credit_card' &&
               transaction.type == 'income',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final pendingExpenseCents = monthTransactions
         .where(
           (transaction) =>
@@ -301,17 +337,21 @@ class HomeViewModel extends StateNotifier<HomeState> {
               transaction.paymentMethod != 'credit_card' &&
               transaction.type == 'expense',
         )
-        .fold<int>(0, (total, transaction) => total + transaction.amount);
+        .fold<int>(
+          0,
+          (total, transaction) =>
+              total + _convertTransactionAmount(transaction, ratesToBrl),
+        );
     final creditCardInvoiceTotalsByCard =
-        _openCurrentCreditCardInvoiceTotalsByCard(now);
+        _openCurrentCreditCardInvoiceTotalsByCard(now, ratesToBrl);
     final creditCardInvoiceCents = creditCardInvoiceTotalsByCard.values
         .fold<int>(0, (total, amount) => total + amount);
     final paidCreditCardInvoiceCents =
-        _paidCreditCardInvoicesInMonth(firstDay, lastDay);
+        _paidCreditCardInvoicesInMonth(firstDay, lastDay, ratesToBrl);
     final currentBalanceCents = _accounts.fold<int>(
       0,
       (total, account) => account.includeInTotalBalance
-          ? total + account.currentBalance
+          ? total + _convertAccountAmount(account, ratesToBrl)
           : total,
     );
     final initialMonthBalanceCents = currentBalanceCents -
@@ -328,6 +368,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     final accountsById = {for (final account in _accounts) account.id: account};
 
     state = state.copyWith(
+      currencyCode: _currencyCode,
       currentBalanceCents: currentBalanceCents,
       projectedBalanceCents: projectedBalanceCents,
       initialMonthBalanceCents: initialMonthBalanceCents,
@@ -344,6 +385,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
         monthTransactions: monthTransactions,
         categoryMap: categoryMap,
         expenseCents: expenseCents,
+        ratesToBrl: ratesToBrl,
       ),
       recentTransactions: _buildRecentTransactions(categoryMap),
     );
@@ -392,7 +434,10 @@ class HomeViewModel extends StateNotifier<HomeState> {
     );
   }
 
-  Map<int, int> _openCurrentCreditCardInvoiceTotalsByCard(DateTime month) {
+  Map<int, int> _openCurrentCreditCardInvoiceTotalsByCard(
+    DateTime month,
+    Map<String, double> ratesToBrl,
+  ) {
     final totals = <int, int>{};
 
     for (final card in _creditCards) {
@@ -419,7 +464,8 @@ class HomeViewModel extends StateNotifier<HomeState> {
           .toList();
       final transactionTotal = invoiceTransactions.fold<int>(
         0,
-        (total, transaction) => total + _invoiceAmountDelta(transaction),
+        (total, transaction) =>
+            total + _invoiceAmountDelta(transaction, ratesToBrl),
       );
 
       totals[card.id] = invoiceTransactions.isNotEmpty
@@ -445,20 +491,78 @@ class HomeViewModel extends StateNotifier<HomeState> {
     return null;
   }
 
-  int _paidCreditCardInvoicesInMonth(DateTime firstDay, DateTime lastDay) {
+  int _paidCreditCardInvoicesInMonth(
+    DateTime firstDay,
+    DateTime lastDay,
+    Map<String, double> ratesToBrl,
+  ) {
     return _creditCardInvoices.where((invoice) {
       final paidAt = invoice.paidAt;
       if (invoice.status != 'paid' || paidAt == null) {
         return false;
       }
       return !paidAt.isBefore(firstDay) && !paidAt.isAfter(lastDay);
-    }).fold<int>(0, (total, invoice) => total + invoice.amount);
+    }).fold<int>(
+      0,
+      (total, invoice) {
+        final currencyCode = _currencyForCard(invoice.creditCardId);
+        return total +
+            _exchangeRateService.convertCentsWithRates(
+              amountCents: invoice.amount,
+              fromCurrency: currencyCode,
+              toCurrency: _currencyCode,
+              ratesToBrl: ratesToBrl,
+            );
+      },
+    );
   }
 
-  int _invoiceAmountDelta(FinanceTransaction transaction) {
-    return transaction.type == 'income'
-        ? -transaction.amount
-        : transaction.amount;
+  int _invoiceAmountDelta(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    final amount = _convertTransactionAmount(transaction, ratesToBrl);
+    return transaction.type == 'income' ? -amount : amount;
+  }
+
+  int _convertTransactionAmount(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: transaction.amount,
+      fromCurrency: transaction.currencyCode,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
+  int _convertAccountAmount(Account account, Map<String, double> ratesToBrl) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: account.currentBalance,
+      fromCurrency: account.currencyCode,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
+  String _currencyForCard(int cardId) {
+    CreditCard? card;
+    for (final candidate in _creditCards) {
+      if (candidate.id == cardId) {
+        card = candidate;
+        break;
+      }
+    }
+    if (card == null) {
+      return _currencyCode;
+    }
+    for (final account in _accounts) {
+      if (account.id == card.defaultPaymentAccountId) {
+        return account.currencyCode;
+      }
+    }
+    return _currencyCode;
   }
 
   DateTime _referenceDate(FinanceTransaction transaction) {
@@ -479,6 +583,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     required List<FinanceTransaction> monthTransactions,
     required Map<int, CategoryModel> categoryMap,
     required int expenseCents,
+    required Map<String, double> ratesToBrl,
   }) {
     final totalsByCategory = <int, int>{};
     for (final transaction in monthTransactions) {
@@ -487,8 +592,8 @@ class HomeViewModel extends StateNotifier<HomeState> {
       }
       totalsByCategory.update(
         transaction.categoryId,
-        (value) => value + transaction.amount,
-        ifAbsent: () => transaction.amount,
+        (value) => value + _convertTransactionAmount(transaction, ratesToBrl),
+        ifAbsent: () => _convertTransactionAmount(transaction, ratesToBrl),
       );
     }
 
@@ -520,6 +625,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
           subtitle:
               categoryMap[transaction.categoryId]?.name ?? 'Sem categoria',
           amountCents: transaction.amount,
+          currencyCode: transaction.currencyCode,
           icon: categoryMap[transaction.categoryId]?.icon ??
               Icons.category_rounded,
           iconColor:
@@ -582,5 +688,7 @@ final homeViewModelProvider =
     categoryRepository: ref.watch(categoryRepositoryProvider),
     creditCardRepository: ref.watch(creditCardRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
   );
 });

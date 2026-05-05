@@ -72,7 +72,10 @@ class PlanningPage extends ConsumerWidget {
                   : Column(
                       children: [
                         for (final budget in state.budgets)
-                          _BudgetRow(budget: budget),
+                          _BudgetRow(
+                            budget: budget,
+                            currencyCode: state.currencyCode,
+                          ),
                       ],
                     ),
             ),
@@ -89,7 +92,10 @@ class PlanningPage extends ConsumerWidget {
                   : Column(
                       children: [
                         for (final bill in state.upcomingBills)
-                          _BillRow(bill: bill),
+                          _BillRow(
+                            bill: bill,
+                            currencyCode: state.currencyCode,
+                          ),
                       ],
                     ),
             ),
@@ -268,7 +274,13 @@ class _PlanningProgressCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             state.hasPlan
-                ? '${CurrencyUtils.formatCents(state.currentExpenseCents)} gastos de ${CurrencyUtils.formatCents(state.plannedExpenseCents)} planejados'
+                ? '${CurrencyUtils.formatCents(
+                    state.currentExpenseCents,
+                    currencyCode: state.currencyCode,
+                  )} gastos de ${CurrencyUtils.formatCents(
+                    state.plannedExpenseCents,
+                    currencyCode: state.currencyCode,
+                  )} planejados'
                 : 'Defina receita, despesas e saldo inicial para acompanhar o mes com dados reais.',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.white,
@@ -276,7 +288,10 @@ class _PlanningProgressCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '${CurrencyUtils.formatCents(state.currentIncomeCents)} recebidos no mes',
+            '${CurrencyUtils.formatCents(
+              state.currentIncomeCents,
+              currencyCode: state.currencyCode,
+            )} recebidos no mes',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.white.withValues(alpha: 0.86),
                 ),
@@ -308,7 +323,10 @@ class _PlanningMetrics extends StatelessWidget {
               width: metricWidth,
               child: _PlanningMetric(
                 title: 'Orcamento disponivel',
-                value: CurrencyUtils.formatCents(state.availableBudgetCents),
+                value: CurrencyUtils.formatCents(
+                  state.availableBudgetCents,
+                  currencyCode: state.currencyCode,
+                ),
                 icon: Icons.account_balance_wallet_rounded,
                 color: state.availableBudgetCents < 0
                     ? context.colors.danger
@@ -319,7 +337,10 @@ class _PlanningMetrics extends StatelessWidget {
               width: metricWidth,
               child: _PlanningMetric(
                 title: 'Contas previstas',
-                value: CurrencyUtils.formatCents(state.upcomingBillsCents),
+                value: CurrencyUtils.formatCents(
+                  state.upcomingBillsCents,
+                  currencyCode: state.currencyCode,
+                ),
                 icon: Icons.calendar_month_rounded,
                 color: context.colors.primary,
               ),
@@ -328,7 +349,10 @@ class _PlanningMetrics extends StatelessWidget {
               width: metricWidth,
               child: _PlanningMetric(
                 title: 'Receita planejada',
-                value: CurrencyUtils.formatCents(state.plannedIncomeCents),
+                value: CurrencyUtils.formatCents(
+                  state.plannedIncomeCents,
+                  currencyCode: state.currencyCode,
+                ),
                 icon: Icons.trending_up_rounded,
                 color: context.colors.info,
               ),
@@ -339,6 +363,7 @@ class _PlanningMetrics extends StatelessWidget {
                 title: 'Saldo final previsto',
                 value: CurrencyUtils.formatCents(
                   state.projectedFinalBalanceCents,
+                  currencyCode: state.currencyCode,
                 ),
                 icon: Icons.ssid_chart_rounded,
                 color: state.projectedFinalBalanceCents < 0
@@ -382,22 +407,34 @@ class _PlanSummaryCard extends StatelessWidget {
         children: [
           _PlanRow(
             label: 'Saldo inicial',
-            value: CurrencyUtils.formatCents(state.initialMonthBalanceCents),
+            value: CurrencyUtils.formatCents(
+              state.initialMonthBalanceCents,
+              currencyCode: state.currencyCode,
+            ),
           ),
           Divider(height: 22, color: context.colors.border),
           _PlanRow(
             label: 'Receita planejada',
-            value: CurrencyUtils.formatCents(state.plannedIncomeCents),
+            value: CurrencyUtils.formatCents(
+              state.plannedIncomeCents,
+              currencyCode: state.currencyCode,
+            ),
           ),
           Divider(height: 22, color: context.colors.border),
           _PlanRow(
             label: 'Despesa planejada',
-            value: CurrencyUtils.formatCents(state.plannedExpenseCents),
+            value: CurrencyUtils.formatCents(
+              state.plannedExpenseCents,
+              currencyCode: state.currencyCode,
+            ),
           ),
           Divider(height: 22, color: context.colors.border),
           _PlanRow(
             label: 'Saldo final planejado',
-            value: CurrencyUtils.formatCents(state.plannedFinalBalanceCents),
+            value: CurrencyUtils.formatCents(
+              state.plannedFinalBalanceCents,
+              currencyCode: state.currencyCode,
+            ),
           ),
         ],
       ),
@@ -506,9 +543,13 @@ class _PlanningMetric extends StatelessWidget {
 }
 
 class _BudgetRow extends StatelessWidget {
-  const _BudgetRow({required this.budget});
+  const _BudgetRow({
+    required this.budget,
+    required this.currencyCode,
+  });
 
   final BudgetLimitPreview budget;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -533,8 +574,17 @@ class _BudgetRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   budget.limitCents == 0
-                      ? '${CurrencyUtils.formatCents(budget.usedCents)} usados'
-                      : '${CurrencyUtils.formatCents(budget.usedCents)} de ${CurrencyUtils.formatCents(budget.limitCents)}',
+                      ? '${CurrencyUtils.formatCents(
+                          budget.usedCents,
+                          currencyCode: currencyCode,
+                        )} usados'
+                      : '${CurrencyUtils.formatCents(
+                          budget.usedCents,
+                          currencyCode: currencyCode,
+                        )} de ${CurrencyUtils.formatCents(
+                          budget.limitCents,
+                          currencyCode: currencyCode,
+                        )}',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -574,9 +624,13 @@ class _BudgetRow extends StatelessWidget {
 }
 
 class _BillRow extends StatelessWidget {
-  const _BillRow({required this.bill});
+  const _BillRow({
+    required this.bill,
+    required this.currencyCode,
+  });
 
   final PlannedBillPreview bill;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -611,7 +665,10 @@ class _BillRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            CurrencyUtils.formatCents(bill.amountCents),
+            CurrencyUtils.formatCents(
+              bill.amountCents,
+              currencyCode: currencyCode,
+            ),
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -696,6 +753,7 @@ class _PlanningFormSheetState extends ConsumerState<_PlanningFormSheet> {
         state.plannedIncomeCents > 0
             ? state.plannedIncomeCents
             : state.currentIncomeCents,
+        currencyCode: state.currencyCode,
       ),
     );
     _expenseController = TextEditingController(
@@ -703,10 +761,14 @@ class _PlanningFormSheetState extends ConsumerState<_PlanningFormSheet> {
         state.plannedExpenseCents > 0
             ? state.plannedExpenseCents
             : state.currentExpenseCents,
+        currencyCode: state.currencyCode,
       ),
     );
     _initialBalanceController = TextEditingController(
-      text: CurrencyUtils.formatCents(state.initialMonthBalanceCents),
+      text: CurrencyUtils.formatCents(
+        state.initialMonthBalanceCents,
+        currencyCode: state.currencyCode,
+      ),
     );
   }
 

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/category_model.dart';
@@ -17,6 +19,7 @@ class CategoriesState {
     this.reportSummary = const CategoryReportSummary(),
     this.reportItems = const [],
     this.selectedType = 'expense',
+    this.currencyCode = 'BRL',
     this.categories = const [],
     this.subcategories = const [],
     this.isLoading = false,
@@ -35,6 +38,7 @@ class CategoriesState {
   final CategoryReportSummary reportSummary;
   final List<CategoryReportItem> reportItems;
   final String selectedType;
+  final String currencyCode;
   final List<CategoryModel> categories;
   final List<SubcategoryModel> subcategories;
   final bool isLoading;
@@ -57,6 +61,7 @@ class CategoriesState {
     CategoryReportSummary? reportSummary,
     List<CategoryReportItem>? reportItems,
     String? selectedType,
+    String? currencyCode,
     List<CategoryModel>? categories,
     List<SubcategoryModel>? subcategories,
     bool? isLoading,
@@ -68,6 +73,7 @@ class CategoriesState {
       reportSummary: reportSummary ?? this.reportSummary,
       reportItems: reportItems ?? this.reportItems,
       selectedType: selectedType ?? this.selectedType,
+      currencyCode: currencyCode ?? this.currencyCode,
       categories: categories ?? this.categories,
       subcategories: subcategories ?? this.subcategories,
       isLoading: isLoading ?? this.isLoading,
@@ -81,9 +87,13 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
     required int? userId,
     required CategoryRepository categoryRepository,
     required TransactionRepository transactionRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
   })  : _userId = userId,
         _categoryRepository = categoryRepository,
         _transactionRepository = transactionRepository,
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
         super(CategoriesState.initial()) {
     _watchData();
   }
@@ -91,6 +101,8 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
   final int? _userId;
   final CategoryRepository _categoryRepository;
   final TransactionRepository _transactionRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<SubcategoryModel>>? _subcategoriesSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
@@ -267,12 +279,14 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
     );
   }
 
-  void _publishState() {
-    final report = _buildReport();
+  Future<void> _publishState() async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    final report = _buildReport(ratesToBrl);
 
     state = state.copyWith(
       categories: _categories,
       subcategories: _subcategories,
+      currencyCode: _currencyCode,
       reportSummary: report.summary,
       reportItems: report.items,
       isLoading: false,
@@ -280,7 +294,7 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
     );
   }
 
-  _CategoryReport _buildReport() {
+  _CategoryReport _buildReport(Map<String, double> ratesToBrl) {
     final selectedMonth = state.selectedMonth;
     final categoriesById = {
       for (final category in _categories) category.id: category,
@@ -314,12 +328,13 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
         transaction.categoryId,
         () => _MutableCategoryReport(category),
       );
-      categoryReport.add(transaction);
+      final amountCents = _convertTransactionAmount(transaction, ratesToBrl);
+      categoryReport.add(transaction, amountCents);
 
       final subcategoryId = transaction.subcategoryId;
       final subcategory =
           subcategoryId == null ? null : subcategoriesById[subcategoryId];
-      categoryReport.addSubcategory(transaction, subcategory);
+      categoryReport.addSubcategory(subcategory, amountCents);
     }
 
     final totalExpenseCents = totalsByCategory.values.fold<int>(
@@ -367,6 +382,18 @@ class CategoriesViewModel extends StateNotifier<CategoriesState> {
     return transaction.dueDate ?? transaction.date;
   }
 
+  int _convertTransactionAmount(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: transaction.amount,
+      fromCurrency: transaction.currencyCode,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
   void _publishError(Object error) {
     state = state.copyWith(
       isLoading: false,
@@ -410,6 +437,8 @@ final categoriesViewModelProvider =
     userId: userId,
     categoryRepository: ref.watch(categoryRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
   );
 });
 
@@ -487,26 +516,26 @@ class _MutableCategoryReport {
   int pendingCents = 0;
   int transactionCount = 0;
 
-  void add(FinanceTransaction transaction) {
-    totalCents += transaction.amount;
+  void add(FinanceTransaction transaction, int amountCents) {
+    totalCents += amountCents;
     transactionCount += 1;
     if (transaction.isPaid) {
-      paidCents += transaction.amount;
+      paidCents += amountCents;
     } else {
-      pendingCents += transaction.amount;
+      pendingCents += amountCents;
     }
   }
 
   void addSubcategory(
-    FinanceTransaction transaction,
     SubcategoryModel? subcategory,
+    int amountCents,
   ) {
     final name = subcategory?.name ?? 'Sem subcategoria';
     final report = subcategories.putIfAbsent(
       name,
       () => _MutableSubcategoryReport(name),
     );
-    report.add(transaction);
+    report.add(amountCents);
   }
 
   CategoryReportItem toReportItem(int totalExpenseCents) {
@@ -534,8 +563,8 @@ class _MutableSubcategoryReport {
   int totalCents = 0;
   int transactionCount = 0;
 
-  void add(FinanceTransaction transaction) {
-    totalCents += transaction.amount;
+  void add(int amountCents) {
+    totalCents += amountCents;
     transactionCount += 1;
   }
 

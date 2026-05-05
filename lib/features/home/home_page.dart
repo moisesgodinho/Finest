@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../data/models/category_expense_preview.dart';
 import '../../data/models/transaction_preview.dart';
+import '../../data/models/transaction_series_scope.dart';
 import '../../shared/widgets/balance_card.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../shared/widgets/section_card.dart';
@@ -299,7 +300,10 @@ class _HomeDashboard extends ConsumerWidget {
             const SizedBox(height: 22),
             BalanceCard(
               title: 'Saldo atual',
-              value: CurrencyUtils.formatCents(state.currentBalanceCents),
+              value: CurrencyUtils.formatCents(
+                state.currentBalanceCents,
+                currencyCode: state.currencyCode,
+              ),
               subtitle: state.balanceVariationLabel,
               isVisible: state.isBalanceVisible,
               onToggleVisibility: viewModel.toggleBalanceVisibility,
@@ -313,6 +317,7 @@ class _HomeDashboard extends ConsumerWidget {
                     title: 'Previsão no fim do mês',
                     value: CurrencyUtils.formatCents(
                       state.projectedBalanceCents,
+                      currencyCode: state.currencyCode,
                     ),
                     color: AppColors.success,
                   ),
@@ -324,6 +329,7 @@ class _HomeDashboard extends ConsumerWidget {
                     title: 'Saldo no início',
                     value: CurrencyUtils.formatCents(
                       state.initialMonthBalanceCents,
+                      currencyCode: state.currencyCode,
                     ),
                     color: AppColors.primary,
                   ),
@@ -348,6 +354,7 @@ class _HomeDashboard extends ConsumerWidget {
             const SizedBox(height: 18),
             _CategoriesCard(
               categories: state.categories,
+              currencyCode: state.currencyCode,
               onViewReport: () => context.push(AppRoutes.categories),
             ),
             const SizedBox(height: 18),
@@ -405,6 +412,15 @@ class _HomeDashboard extends ConsumerWidget {
     WidgetRef ref,
     TransactionListItem transaction,
   ) async {
+    final scope = await _selectPendingSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'editar',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
     final state = ref.read(transactionsViewModelProvider);
     final viewModel = ref.read(transactionsViewModelProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
@@ -444,6 +460,7 @@ class _HomeDashboard extends ConsumerWidget {
                 isPaid: isPaid,
                 date: date,
                 totalInstallments: totalInstallments,
+                scope: scope,
               );
             },
           );
@@ -480,6 +497,7 @@ class _HomeDashboard extends ConsumerWidget {
               subcategoryId: subcategoryId,
               transactionKind: transactionKind,
               totalInstallments: totalInstallments,
+              scope: scope,
             );
           },
         );
@@ -544,6 +562,15 @@ class _HomeDashboard extends ConsumerWidget {
     WidgetRef ref,
     TransactionListItem transaction,
   ) async {
+    final scope = await _selectPendingSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'excluir',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -572,13 +599,113 @@ class _HomeDashboard extends ConsumerWidget {
     try {
       await ref
           .read(transactionsViewModelProvider.notifier)
-          .deleteItem(transaction);
+          .deleteItem(transaction, scope: scope);
       messenger.showSnackBar(
         const SnackBar(content: Text('Pendência excluída.')),
       );
     } catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<TransactionSeriesScope?> _selectPendingSeriesScope(
+    BuildContext context,
+    TransactionListItem transaction, {
+    required String actionLabel,
+  }) async {
+    if (!transaction.supportsSeriesScope) {
+      return TransactionSeriesScope.current;
+    }
+
+    return showModalBottomSheet<TransactionSeriesScope>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aplicar ao $actionLabel',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha quais parcelas devem receber esta alteração.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _PendingSeriesScopeTile(
+                  icon: Icons.event_rounded,
+                  title: 'Somente este mês',
+                  subtitle: 'Aplica apenas na parcela selecionada.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.current,
+                  ),
+                ),
+                _PendingSeriesScopeTile(
+                  icon: Icons.update_rounded,
+                  title: 'Este mês e próximos',
+                  subtitle: 'Aplica desta parcela em diante.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.currentAndFuture,
+                  ),
+                ),
+                _PendingSeriesScopeTile(
+                  icon: Icons.all_inclusive_rounded,
+                  title: 'Todas as parcelas',
+                  subtitle: 'Inclui parcelas anteriores e futuras.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.all,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PendingSeriesScopeTile extends StatelessWidget {
+  const _PendingSeriesScopeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: colors.accentSoft,
+        foregroundColor: colors.primary,
+        child: Icon(icon),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
   }
 }
 
@@ -754,6 +881,7 @@ class _ResponsiveSummarySection extends StatelessWidget {
               Expanded(
                 child: _PendingTransactionsCard(
                   transactions: pendingTransactions,
+                  currencyCode: state.currencyCode,
                   onTap: onOpenPendingTransactions,
                 ),
               ),
@@ -767,6 +895,7 @@ class _ResponsiveSummarySection extends StatelessWidget {
             const SizedBox(height: 18),
             _PendingTransactionsCard(
               transactions: pendingTransactions,
+              currencyCode: state.currencyCode,
               onTap: onOpenPendingTransactions,
             ),
           ],
@@ -854,14 +983,20 @@ class _MonthlySummaryCard extends StatelessWidget {
         children: [
           _AmountLine(
             label: 'Receitas',
-            value: CurrencyUtils.formatCents(state.incomeCents),
+            value: CurrencyUtils.formatCents(
+              state.incomeCents,
+              currencyCode: state.currencyCode,
+            ),
             color: AppColors.success,
             percent: state.incomeProgressPercent,
           ),
           const SizedBox(height: 12),
           _AmountLine(
             label: 'Despesas',
-            value: CurrencyUtils.formatCents(state.expenseCents),
+            value: CurrencyUtils.formatCents(
+              state.expenseCents,
+              currencyCode: state.currencyCode,
+            ),
             color: AppColors.danger,
             percent: state.expenseProgressPercent,
           ),
@@ -872,6 +1007,7 @@ class _MonthlySummaryCard extends StatelessWidget {
               pendingIncomeCents: state.pendingIncomeCents,
               pendingExpenseCents: state.pendingExpenseCents,
               creditCardInvoiceCents: state.creditCardInvoiceCents,
+              currencyCode: state.currencyCode,
             ),
           ],
           const SizedBox(height: 16),
@@ -958,11 +1094,13 @@ class _PendingSummary extends StatelessWidget {
     required this.pendingIncomeCents,
     required this.pendingExpenseCents,
     required this.creditCardInvoiceCents,
+    required this.currencyCode,
   });
 
   final int pendingIncomeCents;
   final int pendingExpenseCents;
   final int creditCardInvoiceCents;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -981,7 +1119,10 @@ class _PendingSummary extends StatelessWidget {
               _PendingLine(
                 icon: Icons.schedule_rounded,
                 label: 'A receber',
-                value: CurrencyUtils.formatCents(pendingIncomeCents),
+                value: CurrencyUtils.formatCents(
+                  pendingIncomeCents,
+                  currencyCode: currencyCode,
+                ),
                 color: AppColors.success,
               ),
             if (pendingIncomeCents > 0 &&
@@ -991,7 +1132,10 @@ class _PendingSummary extends StatelessWidget {
               _PendingLine(
                 icon: Icons.event_busy_rounded,
                 label: 'A pagar',
-                value: CurrencyUtils.formatCents(pendingExpenseCents),
+                value: CurrencyUtils.formatCents(
+                  pendingExpenseCents,
+                  currencyCode: currencyCode,
+                ),
                 color: AppColors.danger,
               ),
             if (pendingExpenseCents > 0 && creditCardInvoiceCents > 0)
@@ -1000,7 +1144,10 @@ class _PendingSummary extends StatelessWidget {
               _PendingLine(
                 icon: Icons.credit_card_rounded,
                 label: 'Faturas em aberto',
-                value: CurrencyUtils.formatCents(creditCardInvoiceCents),
+                value: CurrencyUtils.formatCents(
+                  creditCardInvoiceCents,
+                  currencyCode: currencyCode,
+                ),
                 color: AppColors.info,
               ),
           ],
@@ -1050,10 +1197,12 @@ class _PendingLine extends StatelessWidget {
 class _PendingTransactionsCard extends StatelessWidget {
   const _PendingTransactionsCard({
     required this.transactions,
+    required this.currencyCode,
     required this.onTap,
   });
 
   final List<TransactionListItem> transactions;
+  final String currencyCode;
   final VoidCallback onTap;
 
   @override
@@ -1101,7 +1250,10 @@ class _PendingTransactionsCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  CurrencyUtils.formatCents(totalPendingCents),
+                                  CurrencyUtils.formatCents(
+                                    totalPendingCents,
+                                    currencyCode: currencyCode,
+                                  ),
                                   style: Theme.of(context)
                                       .textTheme
                                       .titleLarge
@@ -1127,6 +1279,7 @@ class _PendingTransactionsCard extends StatelessWidget {
                               label: 'A receber',
                               value: CurrencyUtils.formatCents(
                                 pendingIncomeCents,
+                                currencyCode: currencyCode,
                               ),
                               color: AppColors.success,
                             ),
@@ -1135,6 +1288,7 @@ class _PendingTransactionsCard extends StatelessWidget {
                               label: 'A pagar',
                               value: CurrencyUtils.formatCents(
                                 pendingExpenseCents,
+                                currencyCode: currencyCode,
                               ),
                               color: AppColors.danger,
                             ),
@@ -1143,6 +1297,7 @@ class _PendingTransactionsCard extends StatelessWidget {
                               label: 'Transferências',
                               value: CurrencyUtils.formatCents(
                                 pendingTransferCents,
+                                currencyCode: currencyCode,
                               ),
                               color: AppColors.info,
                             ),
@@ -1255,10 +1410,12 @@ class _PendingPreviewRow extends StatelessWidget {
 class _CategoriesCard extends StatelessWidget {
   const _CategoriesCard({
     required this.categories,
+    required this.currencyCode,
     required this.onViewReport,
   });
 
   final List<CategoryExpensePreview> categories;
+  final String currencyCode;
   final VoidCallback onViewReport;
 
   @override
@@ -1277,7 +1434,10 @@ class _CategoriesCard extends StatelessWidget {
           : Column(
               children: [
                 for (final category in categories) ...[
-                  _CategoryRow(category: category),
+                  _CategoryRow(
+                    category: category,
+                    currencyCode: currencyCode,
+                  ),
                   if (category != categories.last) const SizedBox(height: 12),
                 ],
               ],
@@ -1317,9 +1477,13 @@ class _EmptySectionMessage extends StatelessWidget {
 }
 
 class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({required this.category});
+  const _CategoryRow({
+    required this.category,
+    required this.currencyCode,
+  });
 
   final CategoryExpensePreview category;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -1345,7 +1509,12 @@ class _CategoryRow extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                   ),
-                  Text(CurrencyUtils.formatCents(category.amountCents)),
+                  Text(
+                    CurrencyUtils.formatCents(
+                      category.amountCents,
+                      currencyCode: currencyCode,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1452,7 +1621,10 @@ class _TransactionTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           _TransactionAmountDate(
-            amount: CurrencyUtils.formatCents(transaction.amountCents),
+            amount: CurrencyUtils.formatCents(
+              transaction.amountCents,
+              currencyCode: transaction.currencyCode,
+            ),
             date: transaction.dateLabel ?? '',
             prefix: prefix,
             color: color,
@@ -1640,7 +1812,10 @@ class _PendingTransactionTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _TransactionAmountDate(
-            amount: CurrencyUtils.formatCents(transaction.amountCents),
+            amount: CurrencyUtils.formatCents(
+              transaction.amountCents,
+              currencyCode: transaction.currencyCode,
+            ),
             date: _formatShortDate(dueDate),
             prefix: _amountPrefix(transaction),
             color: amountColor,
@@ -1706,9 +1881,10 @@ List<TransactionListItem> _currentMonthPendingTransactions(
 }
 
 int _pendingIncomeCents(List<TransactionListItem> transactions) {
-  return transactions
-      .where((transaction) => transaction.isIncome)
-      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+  return transactions.where((transaction) => transaction.isIncome).fold<int>(
+        0,
+        (total, transaction) => total + transaction.summaryAmountCents,
+      );
 }
 
 int _pendingExpenseCents(List<TransactionListItem> transactions) {
@@ -1716,19 +1892,23 @@ int _pendingExpenseCents(List<TransactionListItem> transactions) {
       .where(
         (transaction) => transaction.isExpense && !transaction.isCreditCard,
       )
-      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+      .fold<int>(
+        0,
+        (total, transaction) => total + transaction.summaryAmountCents,
+      );
 }
 
 int _pendingTransferCents(List<TransactionListItem> transactions) {
-  return transactions
-      .where((transaction) => transaction.isTransfer)
-      .fold<int>(0, (total, transaction) => total + transaction.amountCents);
+  return transactions.where((transaction) => transaction.isTransfer).fold<int>(
+        0,
+        (total, transaction) => total + transaction.summaryAmountCents,
+      );
 }
 
 int _pendingTotalCents(List<TransactionListItem> transactions) {
   return transactions.fold<int>(
     0,
-    (total, transaction) => total + transaction.amountCents,
+    (total, transaction) => total + transaction.summaryAmountCents,
   );
 }
 
@@ -1770,7 +1950,10 @@ String _amountPrefix(TransactionListItem transaction) {
 }
 
 String _amountWithPrefix(TransactionListItem transaction) {
-  return '${_amountPrefix(transaction)}${CurrencyUtils.formatCents(transaction.amountCents)}';
+  return '${_amountPrefix(transaction)}${CurrencyUtils.formatCents(
+    transaction.amountCents,
+    currencyCode: transaction.currencyCode,
+  )}';
 }
 
 String _formatShortDate(DateTime date) {

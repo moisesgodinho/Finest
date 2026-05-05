@@ -10,6 +10,7 @@ import 'daos/accounts_dao.dart';
 import 'daos/categories_dao.dart';
 import 'daos/credit_card_invoices_dao.dart';
 import 'daos/credit_cards_dao.dart';
+import 'daos/exchange_rates_dao.dart';
 import 'daos/transactions_dao.dart';
 import 'daos/transfers_dao.dart';
 import 'daos/users_dao.dart';
@@ -18,6 +19,7 @@ import 'tables/backup_logs_table.dart';
 import 'tables/categories_table.dart';
 import 'tables/credit_card_invoices_table.dart';
 import 'tables/credit_cards_table.dart';
+import 'tables/exchange_rates_table.dart';
 import 'tables/investments_table.dart';
 import 'tables/monthly_plans_table.dart';
 import 'tables/pet_progress_table.dart';
@@ -42,6 +44,7 @@ part 'app_database.g.dart';
     PetProgress,
     BackupLogs,
     Transfers,
+    ExchangeRates,
   ],
   daos: [
     UsersDao,
@@ -51,13 +54,14 @@ part 'app_database.g.dart';
     CreditCardsDao,
     TransactionsDao,
     TransfersDao,
+    ExchangeRatesDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -195,6 +199,67 @@ class AppDatabase extends _$AppDatabase {
               ),
             );
           }
+          if (from < 9) {
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'accounts',
+              columnName: 'currency_code',
+              addColumn: () => migrator.addColumn(
+                accounts,
+                accounts.currencyCode,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'transactions',
+              columnName: 'currency_code',
+              addColumn: () => migrator.addColumn(
+                financialTransactions,
+                financialTransactions.currencyCode,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'transfers',
+              columnName: 'converted_amount',
+              addColumn: () => migrator.addColumn(
+                transfers,
+                transfers.convertedAmount,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'transfers',
+              columnName: 'from_currency_code',
+              addColumn: () => migrator.addColumn(
+                transfers,
+                transfers.fromCurrencyCode,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'transfers',
+              columnName: 'to_currency_code',
+              addColumn: () => migrator.addColumn(
+                transfers,
+                transfers.toCurrencyCode,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'transfers',
+              columnName: 'exchange_rate',
+              addColumn: () => migrator.addColumn(
+                transfers,
+                transfers.exchangeRate,
+              ),
+            );
+            await _createTableIfMissing(
+              migrator,
+              tableName: 'exchange_rates',
+              createTable: () => migrator.createTable(exchangeRates),
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -247,7 +312,7 @@ class AppDatabase extends _$AppDatabase {
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final directory = await getApplicationDocumentsDirectory();
-    final file = File(p.join(directory.path, 'finance_pet.sqlite'));
+    final file = File(p.join(directory.path, 'finest.sqlite'));
     return NativeDatabase.createInBackground(file);
   });
 }

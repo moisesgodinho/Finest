@@ -72,6 +72,11 @@ class CreditCardInvoiceTransactionPreview {
   bool get isCredit => type == 'income';
   bool get isRefund => entryKind == 'refund';
   bool get isCashback => entryKind == 'cashback';
+  bool get isInstallmentSeries =>
+      entryKind == 'installment' &&
+      (installmentNumber ?? 0) > 0 &&
+      (totalInstallments ?? 0) > 1;
+  bool get supportsSeriesScope => isInstallmentSeries;
 
   int get signedAmountCents => isCredit ? -amountCents : amountCents;
 

@@ -7,6 +7,7 @@ class UpdateAccountRequest {
     required this.initialBalance,
     required this.currentBalance,
     required this.includeInTotalBalance,
+    required this.currencyCode,
     required this.color,
     this.bankName,
     this.emergencyReserveTarget,
@@ -21,6 +22,7 @@ class UpdateAccountRequest {
   final int initialBalance;
   final int currentBalance;
   final bool includeInTotalBalance;
+  final String currencyCode;
   final String color;
   final int? emergencyReserveTarget;
   final String? icon;

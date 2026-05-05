@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/currency/app_currency.dart';
+import '../../core/currency/currency_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../core/utils/date_utils.dart';
@@ -54,7 +56,10 @@ class AccountsPage extends ConsumerWidget {
             const SizedBox(height: 20),
             BalanceCard(
               title: 'Saldo total em contas',
-              value: CurrencyUtils.formatCents(state.totalBalanceCents),
+              value: CurrencyUtils.formatCents(
+                state.totalBalanceCents,
+                currencyCode: state.currencyCode,
+              ),
               subtitle: '${state.accounts.length} contas vinculadas',
               isVisible: state.isBalanceVisible,
               onToggleVisibility: viewModel.toggleBalanceVisibility,
@@ -74,6 +79,7 @@ class AccountsPage extends ConsumerWidget {
                         for (final account in state.accounts)
                           _AccountTile(
                             account: account,
+                            displayCurrencyCode: state.currencyCode,
                             onTap: () => _openAccountForm(
                               context,
                               ref,
@@ -134,6 +140,7 @@ class AccountsPage extends ConsumerWidget {
   }) async {
     final viewModel = ref.read(accountsViewModelProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final defaultCurrencyCode = ref.read(currencyControllerProvider);
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -146,6 +153,7 @@ class AccountsPage extends ConsumerWidget {
       builder: (context) {
         return _AccountFormSheet(
           account: account,
+          defaultCurrencyCode: defaultCurrencyCode,
           isEmergencyReserve:
               isEmergencyReserve || account?.isEmergencyReserve == true,
           initialName: initialName,
@@ -157,6 +165,7 @@ class AccountsPage extends ConsumerWidget {
             required int balanceCents,
             int? emergencyReserveTargetCents,
             required String color,
+            required String currencyCode,
             String? bankName,
           }) async {
             if (account == null) {
@@ -165,6 +174,7 @@ class AccountsPage extends ConsumerWidget {
                 type: type,
                 bankName: bankName,
                 initialBalance: balanceCents,
+                currencyCode: currencyCode,
                 emergencyReserveTarget: emergencyReserveTargetCents,
                 color: color,
               );
@@ -175,6 +185,7 @@ class AccountsPage extends ConsumerWidget {
                 type: type,
                 bankName: bankName,
                 balanceCents: balanceCents,
+                currencyCode: currencyCode,
                 emergencyReserveTarget: emergencyReserveTargetCents,
                 color: color,
               );
@@ -257,6 +268,9 @@ class _EmergencyReserveCard extends StatelessWidget {
       final remainingCents = (targetCents - reserveAccount.balanceCents)
           .clamp(0, targetCents)
           .toInt();
+      final shouldShowConvertedBalance =
+          reserveAccount.currencyCode.toUpperCase() !=
+              state.currencyCode.toUpperCase();
 
       return SectionCard(
         title: 'Reserva de emergência',
@@ -306,8 +320,16 @@ class _EmergencyReserveCard extends StatelessWidget {
                 Expanded(
                   child: _ReserveDataBlock(
                     label: 'Saldo reservado',
-                    value:
-                        CurrencyUtils.formatCents(reserveAccount.balanceCents),
+                    value: CurrencyUtils.formatCents(
+                      reserveAccount.balanceCents,
+                      currencyCode: reserveAccount.currencyCode,
+                    ),
+                    secondaryValue: shouldShowConvertedBalance
+                        ? '≈ ${CurrencyUtils.formatCents(
+                            reserveAccount.consolidatedBalanceCents,
+                            currencyCode: state.currencyCode,
+                          )}'
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -386,9 +408,7 @@ class _EmergencyReserveCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              CurrencyUtils.formatCents(
-                state.suggestedEmergencyReserveCents,
-              ),
+              CurrencyUtils.formatCents(state.suggestedEmergencyReserveCents),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: colors.primary,
                   ),
@@ -477,10 +497,12 @@ class _ReserveDataBlock extends StatelessWidget {
   const _ReserveDataBlock({
     required this.label,
     required this.value,
+    this.secondaryValue,
   });
 
   final String label;
   final String value;
+  final String? secondaryValue;
 
   @override
   Widget build(BuildContext context) {
@@ -513,6 +535,18 @@ class _ReserveDataBlock extends StatelessWidget {
                     color: colors.primary,
                   ),
             ),
+            if (secondaryValue != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                secondaryValue!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
           ],
         ),
       ),
@@ -557,10 +591,12 @@ class _EmptyAccounts extends StatelessWidget {
 class _AccountTile extends StatelessWidget {
   const _AccountTile({
     required this.account,
+    required this.displayCurrencyCode,
     required this.onTap,
   });
 
   final AccountPreview account;
+  final String displayCurrencyCode;
   final VoidCallback onTap;
 
   @override
@@ -570,6 +606,8 @@ class _AccountTile extends StatelessWidget {
     final initials = trimmedName.isEmpty
         ? '?'
         : trimmedName.characters.take(2).toString().toUpperCase();
+    final shouldShowConvertedBalance =
+        account.currencyCode.toUpperCase() != displayCurrencyCode.toUpperCase();
 
     return InkWell(
       onTap: onTap,
@@ -608,14 +646,46 @@ class _AccountTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              CurrencyUtils.formatCents(account.balanceCents),
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 126),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    CurrencyUtils.formatCents(
+                      account.balanceCents,
+                      currencyCode: account.currencyCode,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
+                  if (shouldShowConvertedBalance) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '≈ ${CurrencyUtils.formatCents(
+                        account.consolidatedBalanceCents,
+                        currencyCode: displayCurrencyCode,
+                      )}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
             ),
+            const SizedBox(width: 2),
             Icon(
               Icons.chevron_right_rounded,
+              size: 20,
               color: colors.textSecondary,
             ),
           ],
@@ -637,7 +707,8 @@ class _DistributionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final percent = totalCents == 0 ? 0.0 : account.balanceCents / totalCents;
+    final percent =
+        totalCents == 0 ? 0.0 : account.consolidatedBalanceCents / totalCents;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -695,6 +766,7 @@ class _AccountFormSheet extends StatefulWidget {
     required this.onSubmit,
     this.account,
     this.isEmergencyReserve = false,
+    this.defaultCurrencyCode = AppCurrencies.defaultCode,
     this.initialName,
     this.initialType,
     this.suggestedReserveCents,
@@ -703,6 +775,7 @@ class _AccountFormSheet extends StatefulWidget {
 
   final AccountPreview? account;
   final bool isEmergencyReserve;
+  final String defaultCurrencyCode;
   final String? initialName;
   final String? initialType;
   final int? suggestedReserveCents;
@@ -712,6 +785,7 @@ class _AccountFormSheet extends StatefulWidget {
     required int balanceCents,
     int? emergencyReserveTargetCents,
     required String color,
+    required String currencyCode,
     String? bankName,
   }) onSubmit;
   final Future<void> Function()? onDelete;
@@ -744,6 +818,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
   late final TextEditingController _reserveTargetController;
   late String _selectedType;
   late String _selectedColor;
+  late String _selectedCurrencyCode;
   bool _isSubmitting = false;
 
   @override
@@ -757,7 +832,10 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
     _balanceController = TextEditingController(
       text: account == null
           ? ''
-          : CurrencyUtils.formatCents(account.balanceCents),
+          : CurrencyUtils.formatCents(
+              account.balanceCents,
+              currencyCode: account.currencyCode,
+            ),
     );
     _reserveTargetController = TextEditingController(
       text: _initialReserveTargetText(account),
@@ -769,6 +847,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
             ? initialType!
             : _accountTypes.first;
     _selectedColor = account?.colorHex ?? _colors.first;
+    _selectedCurrencyCode = account?.currencyCode ?? widget.defaultCurrencyCode;
   }
 
   @override
@@ -883,6 +962,31 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
                 },
               ),
               const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedCurrencyCode,
+                decoration: InputDecoration(
+                  labelText: 'Moeda da conta',
+                  prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                  helperText: account == null
+                      ? 'Esta conta aceitará lançamentos nesta moeda.'
+                      : 'A moeda da conta não muda depois de criada.',
+                ),
+                items: [
+                  for (final currency in AppCurrencies.supported)
+                    DropdownMenuItem(
+                      value: currency.code,
+                      child: Text('${currency.code} - ${currency.label}'),
+                    ),
+                ],
+                onChanged: account == null
+                    ? (value) {
+                        if (value != null) {
+                          setState(() => _selectedCurrencyCode = value);
+                        }
+                      }
+                    : null,
+              ),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _balanceController,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -990,6 +1094,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
             : _bankNameController.text.trim(),
         type: _selectedType,
         balanceCents: CurrencyUtils.parseToCents(_balanceController.text),
+        currencyCode: _selectedCurrencyCode,
         emergencyReserveTargetCents: widget.isEmergencyReserve
             ? CurrencyUtils.parseToCents(_reserveTargetController.text)
             : null,

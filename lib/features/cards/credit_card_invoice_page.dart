@@ -10,6 +10,7 @@ import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../data/models/subcategory_model.dart';
+import '../../data/models/transaction_series_scope.dart';
 import '../../shared/widgets/section_card.dart';
 import 'cards_view_model.dart';
 
@@ -452,6 +453,15 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       return;
     }
 
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'editar',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
     final edit = await showModalBottomSheet<_PurchaseEditData>(
       context: context,
       isScrollControlled: true,
@@ -481,6 +491,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       categoryId: edit.categoryId,
       subcategoryId: edit.subcategoryId,
       date: edit.date,
+      scope: scope,
     );
 
     if (context.mounted) {
@@ -500,6 +511,15 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fatura paga não pode ser alterada.')),
       );
+      return;
+    }
+
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'remover',
+    );
+    if (scope == null || !context.mounted) {
       return;
     }
 
@@ -532,6 +552,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     await viewModel.deleteInvoiceTransaction(
       invoice: invoice,
       transaction: transaction,
+      scope: scope,
     );
 
     if (context.mounted) {
@@ -539,6 +560,106 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
         const SnackBar(content: Text('Registro removido.')),
       );
     }
+  }
+
+  Future<TransactionSeriesScope?> _selectSeriesScope(
+    BuildContext context,
+    CreditCardInvoiceTransactionPreview transaction, {
+    required String actionLabel,
+  }) async {
+    if (!transaction.supportsSeriesScope) {
+      return TransactionSeriesScope.current;
+    }
+
+    return showModalBottomSheet<TransactionSeriesScope>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aplicar ao $actionLabel',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha quais parcelas devem receber esta alteração.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.event_rounded,
+                  title: 'Somente este mês',
+                  subtitle: 'Aplica apenas na parcela desta fatura.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.current,
+                  ),
+                ),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.update_rounded,
+                  title: 'Este mês e próximos',
+                  subtitle: 'Aplica desta parcela em diante.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.currentAndFuture,
+                  ),
+                ),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.all_inclusive_rounded,
+                  title: 'Todas as parcelas',
+                  subtitle: 'Inclui parcelas anteriores e futuras.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.all,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _InvoiceSeriesScopeTile extends StatelessWidget {
+  const _InvoiceSeriesScopeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: colors.accentSoft,
+        foregroundColor: colors.primary,
+        child: Icon(icon),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
   }
 }
 
@@ -1941,7 +2062,7 @@ class _PurchaseEditSheetState extends State<_PurchaseEditSheet> {
   void initState() {
     super.initState();
     _descriptionController = TextEditingController(
-      text: widget.transaction.description,
+      text: _seriesBaseName(widget.transaction.description),
     );
     _amountController = TextEditingController(
       text: CurrencyUtils.formatCents(widget.transaction.amountCents),
@@ -2141,4 +2262,11 @@ extension on _PurchaseEditSheet {
 
 String _formatDate(DateTime date) {
   return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
+
+String _seriesBaseName(String value) {
+  return value.trim().replaceFirst(
+        RegExp(r'\s*\(\d+/\d+\)\s*$'),
+        '',
+      );
 }

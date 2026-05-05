@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../data/models/account_preview.dart';
@@ -374,11 +375,29 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
       return;
     }
 
+    final state = ref.read(transferFormViewModelProvider);
+    final fromAccount = _accountById(state.accounts, _selectedFromAccountId!);
+    final toAccount = _accountById(state.accounts, _selectedToAccountId!);
+    if (fromAccount == null || toAccount == null) {
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
+      final amountCents = CurrencyUtils.parseToCents(_amountController.text);
+      final conversion = await _conversionForTransfer(
+        fromAccount: fromAccount,
+        toAccount: toAccount,
+        amountCents: amountCents,
+      );
+      if (conversion == null) {
+        return;
+      }
+
       await ref.read(transferFormViewModelProvider.notifier).saveTransfer(
             name: _nameController.text.trim(),
-            amountCents: CurrencyUtils.parseToCents(_amountController.text),
+            amountCents: amountCents,
+            toAmountCents: conversion.toAmountCents,
             transferKind: _transferKind.value,
             fromAccountId: _selectedFromAccountId!,
             toAccountId: _selectedToAccountId!,
@@ -388,10 +407,17 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
             totalInstallments: _transferKind == _TransferKind.installment
                 ? int.parse(_installmentsController.text)
                 : null,
+            exchangeRate: conversion.exchangeRate,
           );
 
       if (mounted) {
         Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar transferencia: $error')),
+        );
       }
     } finally {
       if (mounted) {
@@ -401,12 +427,148 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
   }
 
   String _accountLabel(AccountPreview account) {
-    return '${account.name} • ${CurrencyUtils.formatCents(account.balanceCents)}';
+    final balance = CurrencyUtils.formatCents(
+      account.balanceCents,
+      currencyCode: account.currencyCode,
+    );
+    return '${account.name} - $balance';
+  }
+
+  AccountPreview? _accountById(List<AccountPreview> accounts, int accountId) {
+    for (final account in accounts) {
+      if (account.id == accountId) {
+        return account;
+      }
+    }
+    return null;
+  }
+
+  Future<_ConversionResult?> _conversionForTransfer({
+    required AccountPreview fromAccount,
+    required AccountPreview toAccount,
+    required int amountCents,
+  }) async {
+    if (fromAccount.currencyCode == toAccount.currencyCode) {
+      return _ConversionResult(
+        toAmountCents: amountCents,
+        exchangeRate: 1,
+      );
+    }
+
+    final quote = await ref.read(exchangeRateServiceProvider).quote(
+          fromCurrency: fromAccount.currencyCode,
+          toCurrency: toAccount.currencyCode,
+        );
+    if (!mounted) {
+      return null;
+    }
+
+    return _confirmConvertedAmount(
+      fromAccount: fromAccount,
+      toAccount: toAccount,
+      amountCents: amountCents,
+      suggestedToAmountCents: quote.convertCents(amountCents),
+      exchangeRate: quote.rate,
+    );
+  }
+
+  Future<_ConversionResult?> _confirmConvertedAmount({
+    required AccountPreview fromAccount,
+    required AccountPreview toAccount,
+    required int amountCents,
+    required int suggestedToAmountCents,
+    required double exchangeRate,
+  }) async {
+    final controller = TextEditingController(
+      text: CurrencyUtils.formatCents(
+        suggestedToAmountCents,
+        currencyCode: toAccount.currencyCode,
+      ),
+    );
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar conversao'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${CurrencyUtils.formatCents(amountCents, currencyCode: fromAccount.currencyCode)} saem de ${fromAccount.name}.',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Cotacao sugerida: 1 ${fromAccount.currencyCode} = ${exchangeRate.toStringAsFixed(4)} ${toAccount.currencyCode}.',
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: controller,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Valor que entra em ${toAccount.currencyCode}',
+                    prefixIcon: const Icon(Icons.currency_exchange_rounded),
+                  ),
+                  validator: (value) {
+                    if (value == null ||
+                        CurrencyUtils.parseToCents(value) <= 0) {
+                      return 'Informe o valor convertido.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(context).pop(
+                    CurrencyUtils.parseToCents(controller.text),
+                  );
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+
+    if (result == null) {
+      return null;
+    }
+    return _ConversionResult(
+      toAmountCents: result,
+      exchangeRate: exchangeRate,
+    );
   }
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
+}
+
+class _ConversionResult {
+  const _ConversionResult({
+    required this.toAmountCents,
+    required this.exchangeRate,
+  });
+
+  final int toAmountCents;
+  final double exchangeRate;
 }
 
 class _MissingRequirement extends StatelessWidget {

@@ -13,6 +13,7 @@ import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../data/models/subcategory_model.dart';
+import '../../data/models/transaction_series_scope.dart';
 import '../../data/models/update_credit_card_request.dart';
 import '../../data/models/update_credit_card_expense_request.dart';
 import '../../data/repositories/account_repository.dart';
@@ -396,6 +397,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required int categoryId,
     required int? subcategoryId,
     required DateTime date,
+    TransactionSeriesScope scope = TransactionSeriesScope.current,
   }) async {
     if (invoice.isPaid) {
       throw StateError('Esta fatura já foi paga.');
@@ -405,17 +407,29 @@ class CardsViewModel extends StateNotifier<CardsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _transactionRepository.updateCreditCardExpense(
-        UpdateCreditCardExpenseRequest(
-          userId: userId,
-          transactionId: transaction.id,
-          description: description,
-          amountCents: amountCents,
-          categoryId: categoryId,
-          subcategoryId: subcategoryId,
-          date: date,
-        ),
+      final targets = _invoiceTransactionTargetsFor(transaction, scope);
+      final useInstallmentSuffix = targets.any(
+        (target) => _hasInstallmentSuffix(target.description),
       );
+
+      for (final target in targets) {
+        await _transactionRepository.updateCreditCardExpense(
+          UpdateCreditCardExpenseRequest(
+            userId: userId,
+            transactionId: target.id,
+            description: _seriesDescription(
+              description,
+              installmentNumber: target.installmentNumber,
+              totalInstallments: target.totalInstallments,
+              useSuffix: useInstallmentSuffix,
+            ),
+            amountCents: amountCents,
+            categoryId: categoryId,
+            subcategoryId: subcategoryId,
+            date: date,
+          ),
+        );
+      }
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -428,6 +442,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
   Future<void> deleteInvoiceTransaction({
     required CreditCardInvoicePreview invoice,
     required CreditCardInvoiceTransactionPreview transaction,
+    TransactionSeriesScope scope = TransactionSeriesScope.current,
   }) async {
     if (invoice.isPaid) {
       throw StateError('Esta fatura já foi paga.');
@@ -437,10 +452,13 @@ class CardsViewModel extends StateNotifier<CardsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _transactionRepository.deleteTransaction(
-        userId: userId,
-        transactionId: transaction.id,
-      );
+      final targets = _invoiceTransactionTargetsFor(transaction, scope);
+      for (final target in targets) {
+        await _transactionRepository.deleteTransaction(
+          userId: userId,
+          transactionId: target.id,
+        );
+      }
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -448,6 +466,123 @@ class CardsViewModel extends StateNotifier<CardsState> {
       );
       rethrow;
     }
+  }
+
+  List<FinanceTransaction> _invoiceTransactionTargetsFor(
+    CreditCardInvoiceTransactionPreview selected,
+    TransactionSeriesScope scope,
+  ) {
+    final selectedRaw = _transactionById(selected.id);
+    if (selectedRaw == null) {
+      return const [];
+    }
+    if (scope == TransactionSeriesScope.current ||
+        !selected.supportsSeriesScope) {
+      return [selectedRaw];
+    }
+
+    final matches = _transactions
+        .where(
+          (transaction) =>
+              _matchesCreditCardInstallmentSeries(transaction, selectedRaw),
+        )
+        .where(
+          (transaction) => _matchesInstallmentScope(
+            targetInstallment: transaction.installmentNumber,
+            selectedInstallment: selectedRaw.installmentNumber,
+            scope: scope,
+          ),
+        )
+        .toList()
+      ..sort(_compareInstallmentTransactions);
+
+    return matches.isEmpty ? [selectedRaw] : matches;
+  }
+
+  FinanceTransaction? _transactionById(int id) {
+    for (final transaction in _transactions) {
+      if (transaction.id == id) {
+        return transaction;
+      }
+    }
+    return null;
+  }
+
+  bool _matchesCreditCardInstallmentSeries(
+    FinanceTransaction candidate,
+    FinanceTransaction selected,
+  ) {
+    return candidate.userId == selected.userId &&
+        candidate.paymentMethod == 'credit_card' &&
+        candidate.paymentMethod == selected.paymentMethod &&
+        candidate.creditCardId == selected.creditCardId &&
+        candidate.accountId == selected.accountId &&
+        candidate.categoryId == selected.categoryId &&
+        candidate.subcategoryId == selected.subcategoryId &&
+        candidate.type == selected.type &&
+        candidate.expenseKind == selected.expenseKind &&
+        candidate.totalInstallments == selected.totalInstallments &&
+        _seriesBaseName(candidate.description) ==
+            _seriesBaseName(selected.description);
+  }
+
+  bool _matchesInstallmentScope({
+    required int? targetInstallment,
+    required int? selectedInstallment,
+    required TransactionSeriesScope scope,
+  }) {
+    if (scope == TransactionSeriesScope.all) {
+      return true;
+    }
+    if (scope == TransactionSeriesScope.current) {
+      return targetInstallment == selectedInstallment;
+    }
+
+    return (targetInstallment ?? 0) >= (selectedInstallment ?? 0);
+  }
+
+  int _compareInstallmentTransactions(
+    FinanceTransaction left,
+    FinanceTransaction right,
+  ) {
+    final installmentCompare =
+        (left.installmentNumber ?? 0).compareTo(right.installmentNumber ?? 0);
+    if (installmentCompare != 0) {
+      return installmentCompare;
+    }
+    final leftInvoice = DateTime(
+      left.invoiceYear ?? left.date.year,
+      left.invoiceMonth ?? left.date.month,
+    );
+    final rightInvoice = DateTime(
+      right.invoiceYear ?? right.date.year,
+      right.invoiceMonth ?? right.date.month,
+    );
+    return leftInvoice.compareTo(rightInvoice);
+  }
+
+  String _seriesDescription(
+    String value, {
+    required int? installmentNumber,
+    required int? totalInstallments,
+    required bool useSuffix,
+  }) {
+    final baseName = _seriesBaseName(value);
+    if (!useSuffix || installmentNumber == null || totalInstallments == null) {
+      return baseName;
+    }
+    return '$baseName ($installmentNumber/$totalInstallments)';
+  }
+
+  String _seriesBaseName(String value) {
+    return value.trim().replaceFirst(
+          RegExp(r'\s*\(\d+/\d+\)\s*$'),
+          '',
+        );
+  }
+
+  bool _hasInstallmentSuffix(String value) {
+    return RegExp(r'\(\d+/\d+\)\s*$').hasMatch(value.trim());
   }
 
   void _watchData() {
@@ -601,6 +736,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      currencyCode: account.currencyCode,
       includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,

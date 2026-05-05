@@ -1,4 +1,4 @@
-package com.financepet.finance_pet
+package com.finest
 
 import io.flutter.embedding.android.FlutterActivity
 

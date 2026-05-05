@@ -122,26 +122,33 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      await _transactionRepository.createTransaction(
-        CreateTransactionRequest(
-          userId: userId,
-          accountId: accountId,
-          categoryId: categoryId,
-          subcategoryId: subcategoryId,
-          type: 'expense',
-          description: name,
-          amountCents: amountCents,
-          date: date,
-          dueDate: dueDate,
-          paymentMethod: 'account',
-          expenseKind: expenseKind,
-          installmentNumber: expenseKind == 'installment' ? 1 : null,
-          totalInstallments:
-              expenseKind == 'installment' ? totalInstallments : null,
-          isPaid: isPaid,
-          isRecurring: expenseKind == 'fixed_monthly',
-        ),
-      );
+      final installments =
+          expenseKind == 'installment' ? totalInstallments ?? 1 : 1;
+      final baseName = name.trim();
+
+      for (var index = 0; index < installments; index++) {
+        await _transactionRepository.createTransaction(
+          CreateTransactionRequest(
+            userId: userId,
+            accountId: accountId,
+            categoryId: categoryId,
+            subcategoryId: subcategoryId,
+            type: 'expense',
+            description: installments > 1
+                ? '$baseName (${index + 1}/$installments)'
+                : baseName,
+            amountCents: amountCents,
+            date: _addMonths(date, index),
+            dueDate: _addMonths(dueDate, index),
+            paymentMethod: 'account',
+            expenseKind: expenseKind,
+            installmentNumber: installments > 1 ? index + 1 : null,
+            totalInstallments: installments > 1 ? installments : null,
+            isPaid: index == 0 ? isPaid : false,
+            isRecurring: expenseKind == 'fixed_monthly',
+          ),
+        );
+      }
       state = state.copyWith(isLoading: false, clearError: true);
     } catch (error) {
       state = state.copyWith(
@@ -150,6 +157,17 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
       );
       rethrow;
     }
+  }
+
+  DateTime _addMonths(DateTime date, int months) {
+    if (months == 0) {
+      return date;
+    }
+
+    final targetMonth = DateTime(date.year, date.month + months);
+    final lastDay = DateTime(targetMonth.year, targetMonth.month + 1, 0).day;
+    final day = date.day.clamp(1, lastDay).toInt();
+    return DateTime(targetMonth.year, targetMonth.month, day);
   }
 
   Future<int> createExpenseCategory(String name) async {
@@ -292,6 +310,7 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      currencyCode: account.currencyCode,
       includeInTotalBalance: account.includeInTotalBalance,
       color: _parseColor(account.color),
       colorHex: account.color,

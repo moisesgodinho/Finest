@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/app_currency.dart';
+import '../../core/currency/currency_controller.dart';
 import '../../core/demo/demo_data_service.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/theme/app_colors.dart';
@@ -20,6 +22,8 @@ class SettingsPage extends ConsumerWidget {
     final viewModel = ref.read(settingsViewModelProvider.notifier);
     final user = ref.watch(authStateProvider).user;
     final themePreference = ref.watch(themeControllerProvider);
+    final currencyCode = ref.watch(currencyControllerProvider);
+    final currency = AppCurrencies.byCode(currencyCode);
 
     return SafeArea(
       bottom: false,
@@ -127,10 +131,12 @@ class SettingsPage extends ConsumerWidget {
                       _showThemePicker(context, ref, themePreference);
                     },
                   ),
-                  const _SettingTile(
+                  _SettingTile(
                     icon: Icons.attach_money_rounded,
                     title: 'Moeda',
-                    subtitle: r'Real brasileiro (R$)',
+                    subtitle: '${currency.code} - ${currency.label}',
+                    onTap: () =>
+                        _showCurrencyPicker(context, ref, currencyCode),
                   ),
                 ],
               ),
@@ -281,6 +287,73 @@ class SettingsPage extends ConsumerWidget {
           .read(themeControllerProvider.notifier)
           .setPreference(selectedPreference);
     }
+  }
+
+  Future<void> _showCurrencyPicker(
+    BuildContext context,
+    WidgetRef ref,
+    String selectedCode,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Moeda principal',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  'Usada como preferencia visual do app. Cada conta ainda pode ter a propria moeda.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final currency in AppCurrencies.supported)
+                        ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: context.colors.accentSoft,
+                            foregroundColor: context.colors.primary,
+                            child: Text(currency.symbol),
+                          ),
+                          title: Text('${currency.code} - ${currency.name}'),
+                          subtitle: Text(currency.symbol),
+                          trailing: selectedCode == currency.code
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: context.colors.primary,
+                                )
+                              : null,
+                          onTap: () {
+                            ref
+                                .read(currencyControllerProvider.notifier)
+                                .setCurrency(currency.code);
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

@@ -6,6 +6,7 @@ import '../../core/utils/currency_utils.dart';
 import '../../data/models/account_preview.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/subcategory_model.dart';
+import '../../data/models/transaction_series_scope.dart';
 import '../../shared/widgets/section_card.dart';
 import 'transactions_view_model.dart';
 
@@ -67,7 +68,10 @@ class TransactionsPage extends ConsumerWidget {
               onNext: viewModel.selectNextMonth,
             ),
             const SizedBox(height: 14),
-            _SummaryGrid(summary: state.summary),
+            _SummaryGrid(
+              summary: state.summary,
+              currencyCode: state.currencyCode,
+            ),
             const SizedBox(height: 14),
             _FilterPanel(
               state: state,
@@ -237,6 +241,15 @@ class TransactionsPage extends ConsumerWidget {
     WidgetRef ref,
     TransactionListItem transaction,
   ) async {
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'editar',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
     final state = ref.read(transactionsViewModelProvider);
     final viewModel = ref.read(transactionsViewModelProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
@@ -276,6 +289,7 @@ class TransactionsPage extends ConsumerWidget {
                 isPaid: isPaid,
                 date: date,
                 totalInstallments: totalInstallments,
+                scope: scope,
               );
             },
           );
@@ -312,6 +326,7 @@ class TransactionsPage extends ConsumerWidget {
               subcategoryId: subcategoryId,
               transactionKind: transactionKind,
               totalInstallments: totalInstallments,
+              scope: scope,
             );
           },
         );
@@ -330,6 +345,15 @@ class TransactionsPage extends ConsumerWidget {
     TransactionsViewModel viewModel,
     TransactionListItem transaction,
   ) async {
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'remover',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -355,8 +379,76 @@ class TransactionsPage extends ConsumerWidget {
     );
 
     if (shouldDelete == true) {
-      await viewModel.deleteItem(transaction);
+      await viewModel.deleteItem(transaction, scope: scope);
     }
+  }
+
+  Future<TransactionSeriesScope?> _selectSeriesScope(
+    BuildContext context,
+    TransactionListItem transaction, {
+    required String actionLabel,
+  }) async {
+    if (!transaction.supportsSeriesScope) {
+      return TransactionSeriesScope.current;
+    }
+
+    return showModalBottomSheet<TransactionSeriesScope>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aplicar ao $actionLabel',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha quais parcelas devem receber esta alteração.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _SeriesScopeTile(
+                  icon: Icons.event_rounded,
+                  title: 'Somente este mês',
+                  subtitle: 'Aplica apenas na parcela selecionada.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.current,
+                  ),
+                ),
+                _SeriesScopeTile(
+                  icon: Icons.update_rounded,
+                  title: 'Este mês e próximos',
+                  subtitle: 'Aplica desta parcela em diante.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.currentAndFuture,
+                  ),
+                ),
+                _SeriesScopeTile(
+                  icon: Icons.all_inclusive_rounded,
+                  title: 'Todas as parcelas',
+                  subtitle: 'Inclui parcelas anteriores e futuras.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.all,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _confirmMarkAsPaid(
@@ -441,10 +533,46 @@ class _MonthSelector extends StatelessWidget {
   }
 }
 
+class _SeriesScopeTile extends StatelessWidget {
+  const _SeriesScopeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: colors.accentSoft,
+        foregroundColor: colors.primary,
+        child: Icon(icon),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
+}
+
 class _SummaryGrid extends StatelessWidget {
-  const _SummaryGrid({required this.summary});
+  const _SummaryGrid({
+    required this.summary,
+    required this.currencyCode,
+  });
 
   final TransactionSummary summary;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -461,25 +589,37 @@ class _SummaryGrid extends StatelessWidget {
           children: [
             _SummaryTile(
               title: 'Receitas',
-              value: CurrencyUtils.formatCents(summary.incomeCents),
+              value: CurrencyUtils.formatCents(
+                summary.incomeCents,
+                currencyCode: currencyCode,
+              ),
               icon: Icons.arrow_downward_rounded,
               color: AppColors.success,
             ),
             _SummaryTile(
               title: 'Despesas',
-              value: CurrencyUtils.formatCents(summary.accountExpenseCents),
+              value: CurrencyUtils.formatCents(
+                summary.accountExpenseCents,
+                currencyCode: currencyCode,
+              ),
               icon: Icons.arrow_upward_rounded,
               color: context.colors.danger,
             ),
             _SummaryTile(
               title: 'Cartão',
-              value: CurrencyUtils.formatCents(summary.cardExpenseCents),
+              value: CurrencyUtils.formatCents(
+                summary.cardExpenseCents,
+                currencyCode: currencyCode,
+              ),
               icon: Icons.credit_card_rounded,
               color: context.colors.purple,
             ),
             _SummaryTile(
               title: 'Previstos',
-              value: CurrencyUtils.formatCents(summary.pendingCents),
+              value: CurrencyUtils.formatCents(
+                summary.pendingCents,
+                currencyCode: currencyCode,
+              ),
               icon: Icons.schedule_rounded,
               color: AppColors.warning,
             ),
@@ -962,7 +1102,10 @@ class _TransactionTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _TransactionAmountDate(
-                amount: CurrencyUtils.formatCents(transaction.amountCents),
+                amount: CurrencyUtils.formatCents(
+                  transaction.amountCents,
+                  currencyCode: transaction.currencyCode,
+                ),
                 date: _formatDateShort(transaction.date),
                 prefix: amountPrefix,
                 color: amountColor,
@@ -1129,7 +1272,10 @@ class _TransactionDetailSheet extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              '${_amountPrefix(transaction)}${CurrencyUtils.formatCents(transaction.amountCents)}',
+              '${_amountPrefix(transaction)}${CurrencyUtils.formatCents(
+                transaction.amountCents,
+                currencyCode: transaction.currencyCode,
+              )}',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: amountColor,
                     fontWeight: FontWeight.w900,
@@ -1328,7 +1474,9 @@ class _TransactionEditFormSheetState extends State<TransactionEditFormSheet> {
   void initState() {
     super.initState();
     final transaction = widget.transaction;
-    _descriptionController = TextEditingController(text: transaction.title);
+    _descriptionController = TextEditingController(
+      text: _seriesBaseName(transaction.title),
+    );
     _amountController = TextEditingController(
       text: _formatCentsForInput(transaction.amountCents),
     );
@@ -1683,7 +1831,8 @@ class _TransferEditFormSheetState extends State<TransferEditFormSheet> {
   void initState() {
     super.initState();
     final transfer = widget.transfer;
-    _nameController = TextEditingController(text: transfer.title);
+    _nameController =
+        TextEditingController(text: _seriesBaseName(transfer.title));
     _amountController = TextEditingController(
       text: _formatCentsForInput(transfer.amountCents),
     );
@@ -2336,6 +2485,13 @@ String? _validateInstallments(String? value) {
 String _formatCentsForInput(int cents) {
   final value = cents / 100;
   return value.toStringAsFixed(2).replaceAll('.', ',');
+}
+
+String _seriesBaseName(String value) {
+  return value.trim().replaceFirst(
+        RegExp(r'\s*\(\d+/\d+\)\s*$'),
+        '',
+      );
 }
 
 String _formatDate(DateTime date) {

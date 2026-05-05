@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/account_preview.dart';
@@ -15,6 +17,8 @@ import '../../data/repositories/transaction_repository.dart';
 class AccountsState {
   const AccountsState({
     required this.accounts,
+    required this.currencyCode,
+    this.totalBalanceCents = 0,
     this.monthlyExpenseAverageCents = 0,
     this.suggestedEmergencyReserveCents = 0,
     this.isBalanceVisible = true,
@@ -23,19 +27,13 @@ class AccountsState {
   });
 
   final List<AccountPreview> accounts;
+  final String currencyCode;
+  final int totalBalanceCents;
   final int monthlyExpenseAverageCents;
   final int suggestedEmergencyReserveCents;
   final bool isBalanceVisible;
   final bool isLoading;
   final String? errorMessage;
-
-  int get totalBalanceCents {
-    return accounts.fold<int>(
-      0,
-      (total, account) =>
-          account.includeInTotalBalance ? total + account.balanceCents : total,
-    );
-  }
 
   int get emergencyReserveBalanceCents {
     return emergencyReserveAccount?.balanceCents ?? 0;
@@ -79,6 +77,8 @@ class AccountsState {
 
   AccountsState copyWith({
     List<AccountPreview>? accounts,
+    String? currencyCode,
+    int? totalBalanceCents,
     int? monthlyExpenseAverageCents,
     int? suggestedEmergencyReserveCents,
     bool? isBalanceVisible,
@@ -88,6 +88,8 @@ class AccountsState {
   }) {
     return AccountsState(
       accounts: accounts ?? this.accounts,
+      currencyCode: currencyCode ?? this.currencyCode,
+      totalBalanceCents: totalBalanceCents ?? this.totalBalanceCents,
       monthlyExpenseAverageCents:
           monthlyExpenseAverageCents ?? this.monthlyExpenseAverageCents,
       suggestedEmergencyReserveCents:
@@ -103,17 +105,27 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
   AccountsViewModel({
     required AccountRepository accountRepository,
     required TransactionRepository transactionRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
     required int? userId,
   })  : _accountRepository = accountRepository,
         _transactionRepository = transactionRepository,
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
         _userId = userId,
-        super(const AccountsState(accounts: [], isLoading: true)) {
+        super(AccountsState(
+          accounts: const [],
+          currencyCode: currencyCode,
+          isLoading: true,
+        )) {
     _watchAccounts();
     _watchTransactions();
   }
 
   final AccountRepository _accountRepository;
   final TransactionRepository _transactionRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
   final int? _userId;
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
@@ -131,6 +143,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     int? emergencyReserveTarget,
     bool includeInTotalBalance = true,
     String? bankName,
+    String currencyCode = 'BRL',
     String color = '#006B4F',
   }) async {
     final userId = _requireUserId();
@@ -144,6 +157,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           type: type,
           bankName: bankName,
           initialBalance: initialBalance,
+          currencyCode: currencyCode,
           emergencyReserveTarget: emergencyReserveTarget,
           includeInTotalBalance: includeInTotalBalance,
           color: color,
@@ -166,6 +180,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     int? emergencyReserveTarget,
     bool? includeInTotalBalance,
     String? bankName,
+    String? currencyCode,
     String color = '#006B4F',
   }) async {
     final userId = _requireUserId();
@@ -181,6 +196,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           bankName: bankName,
           initialBalance: balanceCents,
           currentBalance: balanceCents,
+          currencyCode: currencyCode ?? account.currencyCode,
           emergencyReserveTarget: emergencyReserveTarget,
           includeInTotalBalance:
               includeInTotalBalance ?? account.includeInTotalBalance,
@@ -216,7 +232,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
 
   void _watchAccounts() {
     if (_userId == null) {
-      state = const AccountsState(accounts: []);
+      state = AccountsState(accounts: const [], currencyCode: _currencyCode);
       return;
     }
 
@@ -255,14 +271,28 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     );
   }
 
-  void _publishState({
+  Future<void> _publishState({
     bool? isLoading,
     bool clearError = false,
-  }) {
-    final monthlyExpenseAverageCents = _calculateMonthlyExpenseAverageCents();
+  }) async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    final accounts = [
+      for (final account in _accounts)
+        _withConsolidatedBalance(account, ratesToBrl),
+    ];
+    final totalBalanceCents = accounts.fold<int>(
+      0,
+      (total, account) => account.includeInTotalBalance
+          ? total + account.consolidatedBalanceCents
+          : total,
+    );
+    final monthlyExpenseAverageCents =
+        _calculateMonthlyExpenseAverageCents(ratesToBrl);
 
     state = state.copyWith(
-      accounts: _accounts,
+      accounts: accounts,
+      currencyCode: _currencyCode,
+      totalBalanceCents: totalBalanceCents,
       monthlyExpenseAverageCents: monthlyExpenseAverageCents,
       suggestedEmergencyReserveCents:
           _reserveTargetFor(monthlyExpenseAverageCents),
@@ -271,7 +301,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     );
   }
 
-  int _calculateMonthlyExpenseAverageCents() {
+  int _calculateMonthlyExpenseAverageCents(Map<String, double> ratesToBrl) {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month - 2);
     final end = DateTime(now.year, now.month + 1);
@@ -290,8 +320,8 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
       final monthKey = referenceDate.year * 12 + referenceDate.month;
       totalsByMonth.update(
         monthKey,
-        (value) => value + transaction.amount,
-        ifAbsent: () => transaction.amount,
+        (value) => value + _convertTransactionAmount(transaction, ratesToBrl),
+        ifAbsent: () => _convertTransactionAmount(transaction, ratesToBrl),
       );
     }
 
@@ -302,6 +332,43 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     final total =
         totalsByMonth.values.fold<int>(0, (sum, value) => sum + value);
     return (total / totalsByMonth.length).round();
+  }
+
+  int _convertTransactionAmount(
+    FinanceTransaction transaction,
+    Map<String, double> ratesToBrl,
+  ) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: transaction.amount,
+      fromCurrency: transaction.currencyCode,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
+  AccountPreview _withConsolidatedBalance(
+    AccountPreview account,
+    Map<String, double> ratesToBrl,
+  ) {
+    return AccountPreview(
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      bankName: account.bankName,
+      lastDigits: account.lastDigits,
+      balanceCents: account.balanceCents,
+      currencyCode: account.currencyCode,
+      displayBalanceCents: _exchangeRateService.convertCentsWithRates(
+        amountCents: account.balanceCents,
+        fromCurrency: account.currencyCode,
+        toCurrency: _currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
+      includeInTotalBalance: account.includeInTotalBalance,
+      emergencyReserveTargetCents: account.emergencyReserveTargetCents,
+      color: account.color,
+      colorHex: account.colorHex,
+    );
   }
 
   int _reserveTargetFor(int monthlyExpenseAverageCents) {
@@ -330,6 +397,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
       balanceCents: account.currentBalance,
+      currencyCode: account.currencyCode,
       includeInTotalBalance: account.includeInTotalBalance,
       emergencyReserveTargetCents: account.emergencyReserveTarget,
       color: _parseColor(account.color),
@@ -360,6 +428,8 @@ final accountsViewModelProvider =
   return AccountsViewModel(
     accountRepository: ref.watch(accountRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
     userId: userId,
   );
 });

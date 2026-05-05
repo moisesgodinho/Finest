@@ -44,6 +44,8 @@ class FinancialTransactions extends Table {
   TextColumn get type => text().withLength(min: 1, max: 30)();
   TextColumn get description => text().withLength(min: 1, max: 160)();
   IntColumn get amount => integer()();
+  TextColumn get currencyCode =>
+      text().withLength(min: 3, max: 3).withDefault(const Constant('BRL'))();
   DateTimeColumn get date => dateTime()();
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get paymentMethod => text().withLength(min: 1, max: 40)();

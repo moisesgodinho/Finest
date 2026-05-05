@@ -8,6 +8,8 @@ class AccountPreview {
     required this.balanceCents,
     required this.color,
     required this.colorHex,
+    this.currencyCode = 'BRL',
+    this.displayBalanceCents,
     this.includeInTotalBalance = true,
     this.emergencyReserveTargetCents,
     this.bankName,
@@ -20,12 +22,15 @@ class AccountPreview {
   final String? bankName;
   final String? lastDigits;
   final int balanceCents;
+  final String currencyCode;
+  final int? displayBalanceCents;
   final bool includeInTotalBalance;
   final int? emergencyReserveTargetCents;
   final Color color;
   final String colorHex;
 
   bool get isGoal => type == 'goal';
+  int get consolidatedBalanceCents => displayBalanceCents ?? balanceCents;
 
   bool get isEmergencyReserve {
     final normalizedName = name.toLowerCase();

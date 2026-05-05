@@ -48,6 +48,9 @@ class DriftTransferRepository implements TransferRepository {
     if (request.amountCents <= 0) {
       throw ArgumentError('O valor da transferência deve ser maior que zero.');
     }
+    if (request.toAmountCents <= 0) {
+      throw ArgumentError('O valor de destino deve ser maior que zero.');
+    }
     if (request.fromAccountId == request.toAccountId) {
       throw ArgumentError('Escolha contas diferentes para a transferência.');
     }
@@ -84,6 +87,10 @@ class DriftTransferRepository implements TransferRepository {
           toAccountId: request.toAccountId,
           name: request.name.trim(),
           amount: request.amountCents,
+          convertedAmount: Value(request.toAmountCents),
+          fromCurrencyCode: Value(fromAccount.currencyCode),
+          toCurrencyCode: Value(toAccount.currencyCode),
+          exchangeRate: Value(request.exchangeRate),
           transferKind: request.transferKind,
           dueDate: request.dueDate,
           isPaid: Value(request.isPaid),
@@ -104,7 +111,7 @@ class DriftTransferRepository implements TransferRepository {
         await _database.accountsDao.updateCurrentBalance(
           id: toAccount.id,
           userId: request.userId,
-          currentBalance: toAccount.currentBalance + request.amountCents,
+          currentBalance: toAccount.currentBalance + request.toAmountCents,
         );
       }
 
@@ -153,7 +160,8 @@ class DriftTransferRepository implements TransferRepository {
       await _database.accountsDao.updateCurrentBalance(
         id: toAccount.id,
         userId: userId,
-        currentBalance: toAccount.currentBalance + transfer.amount,
+        currentBalance: toAccount.currentBalance +
+            (transfer.convertedAmount ?? transfer.amount),
       );
 
       final affectedRows = await _database.transfersDao.updatePaymentStatus(
@@ -177,6 +185,9 @@ class DriftTransferRepository implements TransferRepository {
       toAccountId: request.toAccountId,
       totalInstallments: request.totalInstallments,
     );
+    if (request.toAmountCents <= 0) {
+      throw ArgumentError('O valor de destino deve ser maior que zero.');
+    }
 
     await _database.transaction(() async {
       final transfer = await _database.transfersDao.findByIdForUser(
@@ -187,22 +198,31 @@ class DriftTransferRepository implements TransferRepository {
         throw StateError('Transferência não encontrada.');
       }
 
-      await _ensureAccountExists(
+      final fromAccount = await _database.accountsDao.findByIdForUser(
+        id: request.fromAccountId,
         userId: request.userId,
-        accountId: request.fromAccountId,
-        message: 'Conta de origem não encontrada.',
       );
-      await _ensureAccountExists(
+      if (fromAccount == null) {
+        throw StateError('Conta de origem não encontrada.');
+      }
+
+      final toAccount = await _database.accountsDao.findByIdForUser(
+        id: request.toAccountId,
         userId: request.userId,
-        accountId: request.toAccountId,
-        message: 'Conta de destino não encontrada.',
       );
+      if (toAccount == null) {
+        throw StateError('Conta de destino não encontrada.');
+      }
 
       final accountDeltas = <int, int>{};
       if (transfer.isPaid) {
         _addAccountDelta(
             accountDeltas, transfer.fromAccountId, transfer.amount);
-        _addAccountDelta(accountDeltas, transfer.toAccountId, -transfer.amount);
+        _addAccountDelta(
+          accountDeltas,
+          transfer.toAccountId,
+          -(transfer.convertedAmount ?? transfer.amount),
+        );
       }
       if (request.isPaid) {
         _addAccountDelta(
@@ -213,7 +233,7 @@ class DriftTransferRepository implements TransferRepository {
         _addAccountDelta(
           accountDeltas,
           request.toAccountId,
-          request.amountCents,
+          request.toAmountCents,
         );
       }
 
@@ -244,6 +264,10 @@ class DriftTransferRepository implements TransferRepository {
           toAccountId: Value(request.toAccountId),
           name: Value(request.name.trim()),
           amount: Value(request.amountCents),
+          convertedAmount: Value(request.toAmountCents),
+          fromCurrencyCode: Value(fromAccount.currencyCode),
+          toCurrencyCode: Value(toAccount.currencyCode),
+          exchangeRate: Value(request.exchangeRate),
           transferKind: Value(request.transferKind),
           dueDate: Value(request.dueDate),
           isPaid: Value(request.isPaid),
@@ -307,7 +331,8 @@ class DriftTransferRepository implements TransferRepository {
       await _database.accountsDao.updateCurrentBalance(
         id: toAccount.id,
         userId: userId,
-        currentBalance: toAccount.currentBalance - transfer.amount,
+        currentBalance: toAccount.currentBalance -
+            (transfer.convertedAmount ?? transfer.amount),
       );
     });
   }
@@ -340,20 +365,6 @@ class DriftTransferRepository implements TransferRepository {
     }
     if (transferKind == 'installment' && ((totalInstallments ?? 0) < 2)) {
       throw ArgumentError('Informe 2 parcelas ou mais.');
-    }
-  }
-
-  Future<void> _ensureAccountExists({
-    required int userId,
-    required int accountId,
-    required String message,
-  }) async {
-    final account = await _database.accountsDao.findByIdForUser(
-      id: accountId,
-      userId: userId,
-    );
-    if (account == null) {
-      throw StateError(message);
     }
   }
 

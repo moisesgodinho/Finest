@@ -233,7 +233,10 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
                       DropdownMenuItem(
                         value: account.id,
                         child: Text(
-                          '${account.name} • ${CurrencyUtils.formatCents(account.balanceCents)}',
+                          '${account.name} - ${CurrencyUtils.formatCents(
+                            account.balanceCents,
+                            currencyCode: account.currencyCode,
+                          )}',
                         ),
                       ),
                   ],
