@@ -15,10 +15,14 @@ class CreditCardPreview {
     required this.closingDay,
     required this.dueDay,
     required this.isPrimary,
+    this.currencyCode = 'BRL',
+    int? displayInvoiceCents,
+    int? displayLimitCents,
     this.bankName,
     this.defaultPaymentAccountId,
     this.defaultPaymentAccountName,
-  });
+  })  : displayInvoiceCents = displayInvoiceCents ?? invoiceCents,
+        displayLimitCents = displayLimitCents ?? limitCents;
 
   final int id;
   final String name;
@@ -27,6 +31,9 @@ class CreditCardPreview {
   final String brandLabel;
   final int invoiceCents;
   final int limitCents;
+  final String currencyCode;
+  final int displayInvoiceCents;
+  final int displayLimitCents;
   final double usedPercent;
   final Color color;
   final String colorHex;
@@ -36,4 +43,7 @@ class CreditCardPreview {
   final String? bankName;
   final int? defaultPaymentAccountId;
   final String? defaultPaymentAccountName;
+
+  int get consolidatedInvoiceCents => displayInvoiceCents;
+  int get consolidatedLimitCents => displayLimitCents;
 }

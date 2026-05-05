@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../shared/widgets/section_card.dart';
@@ -28,13 +30,69 @@ class PetPage extends ConsumerWidget {
             28 + MediaQuery.viewPaddingOf(context).bottom,
           ),
           children: [
+            if (state.isLoading) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 5,
+                  backgroundColor: context.colors.border,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    context.colors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (state.errorMessage != null) ...[
+              _PetStatusCard(message: state.errorMessage!),
+              const SizedBox(height: 14),
+            ],
             _PetHeroCard(state: state),
             const SizedBox(height: 18),
+            _NextEvolutionCard(state: state),
+            const SizedBox(height: 18),
             _PetMetrics(state: state),
+            const SizedBox(height: 18),
+            _EvolutionHistoryCard(state: state),
             const SizedBox(height: 18),
             _EvolutionTrackCard(state: state),
             const SizedBox(height: 18),
             const _MechanicsCard(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PetStatusCard extends StatelessWidget {
+  const _PetStatusCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, color: AppColors.warning),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textPrimary,
+                    ),
+              ),
+            ),
           ],
         ),
       ),
@@ -192,6 +250,161 @@ class _BuffBanner extends StatelessWidget {
   }
 }
 
+class _NextEvolutionCard extends StatelessWidget {
+  const _NextEvolutionCard({required this.state});
+
+  final PetState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final nextLevel = state.nextLevel;
+    final target = state.suggestedContributionTargetCents;
+    final dateFormatter = DateFormat('dd/MM/yyyy');
+
+    return SectionCard(
+      title: 'Próxima evolução',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (nextLevel == null) ...[
+            Text(
+              'Nível máximo alcançado. Agora o foco é manter consistência e proteger sua reserva.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            ),
+          ] else ...[
+            Text(
+              'Nv. ${nextLevel.level}: ${nextLevel.title}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              nextLevel.trigger,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: state.progressToNextLevel,
+                minHeight: 10,
+                backgroundColor: colors.border,
+                valueColor: AlwaysStoppedAnimation<Color>(colors.primaryLight),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${(state.progressToNextLevel * 100).round()}% concluído',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colors.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+                Text(
+                  'faltam ${state.remainingXp} XP',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _PetInsightChip(
+                label: 'Meta sugerida',
+                value: target <= 0
+                    ? 'sem renda'
+                    : CurrencyUtils.formatCents(
+                        target,
+                        currencyCode: state.currencyCode,
+                      ),
+              ),
+              _PetInsightChip(
+                label: 'Aporte atual',
+                value: CurrencyUtils.formatCents(
+                  state.monthlyContributionCents,
+                  currencyCode: state.currencyCode,
+                ),
+              ),
+              _PetInsightChip(
+                label: 'Runway',
+                value: '${state.runwayMonths.toStringAsFixed(1)} mês',
+              ),
+              _PetInsightChip(
+                label: 'Sequência',
+                value: '${state.contributionStreakMonths} meses',
+              ),
+            ],
+          ),
+          if (state.lastEvolutionAt != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Última evolução em ${dateFormatter.format(state.lastEvolutionAt!)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PetInsightChip extends StatelessWidget {
+  const _PetInsightChip({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.accentSoft,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colors.textSecondary,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PetMetrics extends StatelessWidget {
   const _PetMetrics({required this.state});
 
@@ -225,9 +438,38 @@ class _PetMetrics extends StatelessWidget {
                     title: 'Aporte mensal',
                     value: CurrencyUtils.formatCents(
                       state.monthlyContributionCents,
+                      currencyCode: state.currencyCode,
                     ),
-                    progress: state.energyProgress,
+                    progress: state.contributionTargetProgress,
                     color: AppColors.success,
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _PetMetricCard(
+                    icon: Icons.flag_rounded,
+                    title: 'Meta sugerida',
+                    value: state.suggestedContributionTargetCents <= 0
+                        ? 'sem renda'
+                        : CurrencyUtils.formatCents(
+                            state.suggestedContributionTargetCents,
+                            currencyCode: state.currencyCode,
+                          ),
+                    progress: state.contributionTargetProgress,
+                    color: AppColors.primary,
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _PetMetricCard(
+                    icon: Icons.health_and_safety_rounded,
+                    title: 'Reserva',
+                    value: CurrencyUtils.formatCents(
+                      state.emergencyReserveCents,
+                      currencyCode: state.currencyCode,
+                    ),
+                    progress: state.runwayProgress,
+                    color: AppColors.info,
                   ),
                 ),
                 SizedBox(
@@ -235,7 +477,10 @@ class _PetMetrics extends StatelessWidget {
                   child: _PetMetricCard(
                     icon: Icons.account_balance_wallet_rounded,
                     title: 'Total investido',
-                    value: CurrencyUtils.formatCents(state.totalInvestedCents),
+                    value: CurrencyUtils.formatCents(
+                      state.totalInvestedCents,
+                      currencyCode: state.currencyCode,
+                    ),
                     progress: state.runwayProgress,
                     color: AppColors.primary,
                   ),
@@ -356,6 +601,128 @@ class _PetMetricCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EvolutionHistoryCard extends StatelessWidget {
+  const _EvolutionHistoryCard({required this.state});
+
+  final PetState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final events = state.evolutionEvents;
+    final colors = context.colors;
+
+    return SectionCard(
+      title: 'Histórico de evolução',
+      child: events.isEmpty
+          ? Text(
+              'Quando um novo nível for alcançado, o marco aparece aqui com os dados financeiros daquele momento.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            )
+          : Column(
+              children: [
+                for (final event in events.take(6)) ...[
+                  _EvolutionHistoryTile(
+                    event: event,
+                    currencyCode: state.currencyCode,
+                  ),
+                  if (event != events.take(6).last)
+                    Divider(height: 22, color: colors.border),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _EvolutionHistoryTile extends StatelessWidget {
+  const _EvolutionHistoryTile({
+    required this.event,
+    required this.currencyCode,
+  });
+
+  final PetEvolutionEvent event;
+  final String currencyCode;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final formatter = DateFormat('dd/MM/yyyy');
+    final fromLevel = event.fromLevel == null ? null : 'Nv. ${event.fromLevel}';
+    final levelLabel = fromLevel == null
+        ? 'Começou no Nv. ${event.toLevel}'
+        : '$fromLevel para Nv. ${event.toLevel}';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          backgroundColor: colors.primary.withValues(alpha: 0.12),
+          foregroundColor: colors.primary,
+          child: const Icon(Icons.auto_awesome_rounded, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      levelLabel,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                  ),
+                  Text(
+                    formatter.format(event.createdAt),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                event.reason,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _PetInsightChip(
+                    label: 'Aporte',
+                    value: CurrencyUtils.formatCents(
+                      event.monthlyContribution,
+                      currencyCode: currencyCode,
+                    ),
+                  ),
+                  _PetInsightChip(
+                    label: 'Taxa',
+                    value: '${(event.savingsRate * 100).round()}%',
+                  ),
+                  _PetInsightChip(
+                    label: 'Runway',
+                    value: '${event.runwayMonths.toStringAsFixed(1)} mês',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

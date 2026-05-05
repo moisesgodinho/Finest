@@ -14,10 +14,12 @@ class CreditCardInvoicePreview {
     required this.dueDate,
     required this.cardColor,
     required this.transactions,
+    this.currencyCode = 'BRL',
+    int? displayAmountCents,
     this.paymentAccountId,
     this.paymentAccountName,
     this.paidAt,
-  });
+  }) : displayAmountCents = displayAmountCents ?? amountCents;
 
   final int id;
   final int cardId;
@@ -26,6 +28,8 @@ class CreditCardInvoicePreview {
   final int month;
   final int year;
   final int amountCents;
+  final String currencyCode;
+  final int displayAmountCents;
   final String status;
   final String statusLabel;
   final DateTime dueDate;
@@ -37,6 +41,7 @@ class CreditCardInvoicePreview {
 
   bool get isPaid => status == 'paid';
   bool get canPay => !isPaid && amountCents > 0;
+  int get consolidatedAmountCents => displayAmountCents;
 }
 
 class CreditCardInvoiceTransactionPreview {
@@ -48,16 +53,20 @@ class CreditCardInvoiceTransactionPreview {
     required this.categoryId,
     required this.categoryName,
     required this.type,
+    this.currencyCode = 'BRL',
+    int? displayAmountCents,
     this.subcategoryId,
     this.subcategoryName,
     this.entryKind,
     this.installmentNumber,
     this.totalInstallments,
-  });
+  }) : displayAmountCents = displayAmountCents ?? amountCents;
 
   final int id;
   final String description;
   final int amountCents;
+  final String currencyCode;
+  final int displayAmountCents;
   final DateTime date;
   final int categoryId;
   final String categoryName;
@@ -79,6 +88,7 @@ class CreditCardInvoiceTransactionPreview {
   bool get supportsSeriesScope => isInstallmentSeries;
 
   int get signedAmountCents => isCredit ? -amountCents : amountCents;
+  int get consolidatedAmountCents => displayAmountCents;
 
   String get entryKindLabel {
     if (isRefund) {

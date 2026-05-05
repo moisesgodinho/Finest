@@ -59,6 +59,26 @@ class ExchangeRateService {
     await _fetchAndStoreRates(staleCodes);
   }
 
+  Future<void> forceRefresh() async {
+    await _fetchAndStoreRates([
+      for (final currency in AppCurrencies.supported)
+        if (currency.code != _quoteCurrency) currency.code,
+    ]);
+  }
+
+  Future<List<ExchangeRate>> latestStoredRatesToBrl() async {
+    final storedRates =
+        await _database.exchangeRatesDao.latestRatesToQuote(_quoteCurrency);
+    final uniqueRates = <String, ExchangeRate>{};
+
+    for (final rate in storedRates) {
+      uniqueRates.putIfAbsent(rate.baseCurrency, () => rate);
+    }
+
+    return uniqueRates.values.toList()
+      ..sort((left, right) => left.baseCurrency.compareTo(right.baseCurrency));
+  }
+
   Future<ExchangeRateQuote> quote({
     required String fromCurrency,
     required String toCurrency,

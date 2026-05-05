@@ -59,14 +59,15 @@ class _CardsPageState extends ConsumerState<CardsPage> {
     ]..sort((a, b) => b.transaction.date.compareTo(a.transaction.date));
     final totalInvoicesCents = visibleInvoices.fold<int>(
       0,
-      (total, invoice) => total + invoice.amountCents,
+      (total, invoice) => total + invoice.displayAmountCents,
     );
     final availableLimitCents = state.cards.fold<int>(
       0,
       (total, card) {
-        final invoiceAmount = invoicesByCardId[card.id]?.amountCents ?? 0;
+        final invoiceAmount =
+            invoicesByCardId[card.id]?.displayAmountCents ?? 0;
         return total +
-            (card.limitCents - invoiceAmount).clamp(0, 1 << 31).toInt();
+            (card.displayLimitCents - invoiceAmount).clamp(0, 1 << 31).toInt();
       },
     );
     final unpaidInvoicesCount = visibleInvoices
@@ -148,12 +149,18 @@ class _CardsPageState extends ConsumerState<CardsPage> {
               children: [
                 _CardsMetric(
                   title: 'Total em faturas',
-                  value: CurrencyUtils.formatCents(totalInvoicesCents),
+                  value: CurrencyUtils.formatCents(
+                    totalInvoicesCents,
+                    currencyCode: state.currencyCode,
+                  ),
                   icon: Icons.receipt_long_rounded,
                 ),
                 _CardsMetric(
                   title: 'Limite disponível',
-                  value: CurrencyUtils.formatCents(availableLimitCents),
+                  value: CurrencyUtils.formatCents(
+                    availableLimitCents,
+                    currencyCode: state.currencyCode,
+                  ),
                   icon: Icons.account_balance_wallet_rounded,
                 ),
                 _CardsMetric(
@@ -166,7 +173,10 @@ class _CardsPageState extends ConsumerState<CardsPage> {
             const SizedBox(height: 18),
             SectionCard(
               title: 'Gastos por categoria',
-              child: _CardsCategorySpendingChart(spending: categorySpending),
+              child: _CardsCategorySpendingChart(
+                spending: categorySpending,
+                currencyCode: state.currencyCode,
+              ),
             ),
             const SizedBox(height: 14),
             SectionCard(
@@ -213,8 +223,8 @@ class _CardsPageState extends ConsumerState<CardsPage> {
       }
       totalsByCategory.update(
         transaction.categoryId,
-        (total) => total + transaction.amountCents,
-        ifAbsent: () => transaction.amountCents,
+        (total) => total + transaction.displayAmountCents,
+        ifAbsent: () => transaction.displayAmountCents,
       );
       countsByCategory.update(
         transaction.categoryId,
@@ -431,7 +441,7 @@ class _CardsPageState extends ConsumerState<CardsPage> {
         return AlertDialog(
           title: const Text('Pagar fatura?'),
           content: Text(
-            'Vamos descontar ${CurrencyUtils.formatCents(targetInvoice.amountCents)} da conta ${targetInvoice.paymentAccountName ?? card.defaultPaymentAccountName ?? 'padrão'}.',
+            'Vamos descontar ${CurrencyUtils.formatCents(targetInvoice.amountCents, currencyCode: targetInvoice.currencyCode)} da conta ${targetInvoice.paymentAccountName ?? card.defaultPaymentAccountName ?? 'padrão'}.',
           ),
           actions: [
             TextButton(
@@ -899,6 +909,7 @@ class _PhysicalCreditCardState extends State<_PhysicalCreditCard> {
                                       Text(
                                         CurrencyUtils.formatCents(
                                           _invoiceCents,
+                                          currencyCode: card.currencyCode,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -928,6 +939,7 @@ class _PhysicalCreditCardState extends State<_PhysicalCreditCard> {
                                     label: 'Disponível',
                                     value: CurrencyUtils.formatCents(
                                       _availableLimitCents,
+                                      currencyCode: card.currencyCode,
                                     ),
                                   ),
                                 ),
@@ -936,6 +948,7 @@ class _PhysicalCreditCardState extends State<_PhysicalCreditCard> {
                                   label: 'Limite total',
                                   value: CurrencyUtils.formatCents(
                                     card.limitCents,
+                                    currencyCode: card.currencyCode,
                                   ),
                                   alignEnd: true,
                                 ),
@@ -1263,9 +1276,11 @@ class _CardsCategorySpending {
 class _CardsCategorySpendingChart extends StatelessWidget {
   const _CardsCategorySpendingChart({
     required this.spending,
+    required this.currencyCode,
   });
 
   final List<_CardsCategorySpending> spending;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -1307,7 +1322,10 @@ class _CardsCategorySpendingChart extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    CurrencyUtils.formatCents(chartTotal),
+                    CurrencyUtils.formatCents(
+                      chartTotal,
+                      currencyCode: currencyCode,
+                    ),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                         ),
@@ -1324,6 +1342,7 @@ class _CardsCategorySpendingChart extends StatelessWidget {
               _CardsCategorySpendingRow(
                 item: item,
                 totalCents: chartTotal,
+                currencyCode: currencyCode,
               ),
           ],
         ),
@@ -1364,10 +1383,12 @@ class _CardsCategorySpendingRow extends StatelessWidget {
   const _CardsCategorySpendingRow({
     required this.item,
     required this.totalCents,
+    required this.currencyCode,
   });
 
   final _CardsCategorySpending item;
   final int totalCents;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -1405,7 +1426,10 @@ class _CardsCategorySpendingRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            CurrencyUtils.formatCents(item.amountCents),
+            CurrencyUtils.formatCents(
+              item.amountCents,
+              currencyCode: currencyCode,
+            ),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -1596,8 +1620,14 @@ class _CardsInvoicePurchaseTile extends StatelessWidget {
           const SizedBox(width: 8),
           _TransactionAmountDate(
             amount: transaction.isCredit
-                ? '+ ${CurrencyUtils.formatCents(transaction.amountCents)}'
-                : CurrencyUtils.formatCents(transaction.amountCents),
+                ? '+ ${CurrencyUtils.formatCents(
+                    transaction.amountCents,
+                    currencyCode: transaction.currencyCode,
+                  )}'
+                : CurrencyUtils.formatCents(
+                    transaction.amountCents,
+                    currencyCode: transaction.currencyCode,
+                  ),
             date: _formatDate(transaction.date),
             amountColor: transaction.isCredit ? colors.success : null,
           ),
@@ -1777,10 +1807,20 @@ class _CreditCardFormSheetState extends State<_CreditCardFormSheet> {
       text: card?.lastDigits == '0000' ? '' : card?.lastDigits ?? '',
     );
     _limitController = TextEditingController(
-      text: card == null ? '' : CurrencyUtils.formatCents(card.limitCents),
+      text: card == null
+          ? ''
+          : CurrencyUtils.formatCents(
+              card.limitCents,
+              currencyCode: card.currencyCode,
+            ),
     );
     _invoiceController = TextEditingController(
-      text: card == null ? '' : CurrencyUtils.formatCents(card.invoiceCents),
+      text: card == null
+          ? ''
+          : CurrencyUtils.formatCents(
+              card.invoiceCents,
+              currencyCode: card.currencyCode,
+            ),
     );
     _selectedBrand = _brands.any((brand) => brand.value == card?.brand)
         ? card!.brand

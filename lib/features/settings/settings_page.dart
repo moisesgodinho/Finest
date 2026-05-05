@@ -86,15 +86,22 @@ class SettingsPage extends ConsumerWidget {
                   subtitle: 'Objetivos e reservas',
                   onTap: () => context.push(AppRoutes.goals),
                 ),
+                _SettingsShortcut(
+                  icon: Icons.currency_exchange_rounded,
+                  title: 'Cotações',
+                  subtitle: 'Câmbio e moedas',
+                  onTap: () => context.push(AppRoutes.quotes),
+                ),
                 const _SettingsShortcut(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Contas e cartões',
                   subtitle: 'Vinculados',
                 ),
-                const _SettingsShortcut(
+                _SettingsShortcut(
                   icon: Icons.bar_chart_rounded,
                   title: 'Relatórios',
                   subtitle: 'Resumo mensal',
+                  onTap: () => context.push(AppRoutes.reports),
                 ),
               ],
             ),

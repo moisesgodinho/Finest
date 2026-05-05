@@ -1,4 +1,6 @@
 import 'package:finest/core/theme/app_theme.dart';
+import 'package:finest/core/currency/exchange_rate_service.dart';
+import 'package:finest/core/database/app_database.dart';
 import 'package:finest/data/models/account_preview.dart';
 import 'package:finest/data/models/category_model.dart';
 import 'package:finest/data/models/credit_card_invoice_preview.dart';
@@ -126,6 +128,8 @@ class _FakeCardsViewModel extends CardsViewModel {
           categoryRepository: _FakeCategoryRepository(),
           creditCardRepository: _FakeCreditCardRepository(),
           transactionRepository: _FakeTransactionRepository(),
+          exchangeRateService: _FakeExchangeRateService(),
+          currencyCode: 'BRL',
         ) {
     state = initialState;
   }
@@ -149,4 +153,45 @@ class _FakeCreditCardRepository implements CreditCardRepository {
 class _FakeTransactionRepository implements TransactionRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeExchangeRateService implements ExchangeRateService {
+  @override
+  Future<void> refreshIfStale() async {}
+
+  @override
+  Future<void> forceRefresh() async {}
+
+  @override
+  Future<List<ExchangeRate>> latestStoredRatesToBrl() async {
+    return const [];
+  }
+
+  @override
+  Future<ExchangeRateQuote> quote({
+    required String fromCurrency,
+    required String toCurrency,
+  }) async {
+    return ExchangeRateQuote(
+      fromCurrency: fromCurrency,
+      toCurrency: toCurrency,
+      rate: 1,
+      fetchedAt: DateTime(2026),
+    );
+  }
+
+  @override
+  Future<Map<String, double>> ratesToBrlSnapshot() async {
+    return const {'BRL': 1};
+  }
+
+  @override
+  int convertCentsWithRates({
+    required int amountCents,
+    required String fromCurrency,
+    required String toCurrency,
+    required Map<String, double> ratesToBrl,
+  }) {
+    return amountCents;
+  }
 }

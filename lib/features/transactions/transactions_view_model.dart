@@ -62,6 +62,8 @@ class TransactionListItem {
     this.fromAccountId,
     this.toAccountId,
     this.toAccountName,
+    this.toAmountCents,
+    this.toCurrencyCode,
     this.invoiceMonth,
     this.invoiceYear,
     this.kindCode,
@@ -85,6 +87,8 @@ class TransactionListItem {
   final int? fromAccountId;
   final int? toAccountId;
   final String? toAccountName;
+  final int? toAmountCents;
+  final String? toCurrencyCode;
   final int amountCents;
   final String currencyCode;
   final int? consolidatedAmountCents;
@@ -619,6 +623,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       final useInstallmentSuffix = targets.any(
         (target) => _hasInstallmentSuffix(target.name),
       );
+      final conversion = await _transferConversion(
+        fromAccountId: fromAccountId,
+        toAccountId: toAccountId,
+        amountCents: amountCents,
+      );
 
       for (final target in targets) {
         final keepsInstallments = transferKind == 'installment';
@@ -641,7 +650,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
               useSuffix: keepsInstallments && useInstallmentSuffix,
             ),
             amountCents: amountCents,
-            toAmountCents: amountCents,
+            toAmountCents: conversion.toAmountCents,
             transferKind: transferKind,
             dueDate: _shiftDateForSeries(
               dueDate,
@@ -656,6 +665,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
             ),
             installmentNumber: effectiveInstallmentNumber,
             totalInstallments: effectiveTotalInstallments,
+            exchangeRate: conversion.exchangeRate,
           ),
         );
       }
@@ -1146,6 +1156,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       fromAccountId: transfer.fromAccountId,
       toAccountId: transfer.toAccountId,
       toAccountName: accountNames[transfer.toAccountId] ?? 'Conta removida',
+      toAmountCents: transfer.convertedAmount ?? transfer.amount,
+      toCurrencyCode: transfer.toCurrencyCode,
       categoryName: 'Transferência',
       amountCents: transfer.amount,
       currencyCode: transfer.fromCurrencyCode,
@@ -1215,6 +1227,39 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     );
   }
 
+  Future<_TransferConversion> _transferConversion({
+    required int fromAccountId,
+    required int toAccountId,
+    required int amountCents,
+  }) async {
+    final fromAccount = _rawAccounts
+        .where((account) => account.id == fromAccountId)
+        .firstOrNull;
+    final toAccount =
+        _rawAccounts.where((account) => account.id == toAccountId).firstOrNull;
+
+    if (fromAccount == null || toAccount == null) {
+      throw StateError('Conta de origem ou destino nÃ£o encontrada.');
+    }
+
+    if (fromAccount.currencyCode.toUpperCase() ==
+        toAccount.currencyCode.toUpperCase()) {
+      return _TransferConversion(
+        toAmountCents: amountCents,
+        exchangeRate: null,
+      );
+    }
+
+    final quote = await _exchangeRateService.quote(
+      fromCurrency: fromAccount.currencyCode,
+      toCurrency: toAccount.currencyCode,
+    );
+    return _TransferConversion(
+      toAmountCents: quote.convertCents(amountCents),
+      exchangeRate: quote.rate,
+    );
+  }
+
   int _requireUserId() {
     final userId = _userId;
     if (userId == null) {
@@ -1241,6 +1286,16 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
 
 String _normalize(String value) {
   return value.trim().toLowerCase();
+}
+
+class _TransferConversion {
+  const _TransferConversion({
+    required this.toAmountCents,
+    required this.exchangeRate,
+  });
+
+  final int toAmountCents;
+  final double? exchangeRate;
 }
 
 final transactionsViewModelProvider =

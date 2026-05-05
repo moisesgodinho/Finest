@@ -5540,6 +5540,655 @@ class PetProgressCompanion extends UpdateCompanion<PetProgressData> {
   }
 }
 
+class $PetEvolutionEventsTable extends PetEvolutionEvents
+    with TableInfo<$PetEvolutionEventsTable, PetEvolutionEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PetEvolutionEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES users (id) ON DELETE CASCADE'));
+  static const VerificationMeta _fromLevelMeta =
+      const VerificationMeta('fromLevel');
+  @override
+  late final GeneratedColumn<int> fromLevel = GeneratedColumn<int>(
+      'from_level', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _toLevelMeta =
+      const VerificationMeta('toLevel');
+  @override
+  late final GeneratedColumn<int> toLevel = GeneratedColumn<int>(
+      'to_level', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _xpMeta = const VerificationMeta('xp');
+  @override
+  late final GeneratedColumn<int> xp = GeneratedColumn<int>(
+      'xp', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<String> stage = GeneratedColumn<String>(
+      'stage', aliasedName, false,
+      additionalChecks:
+          GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 80),
+      type: DriftSqlType.string,
+      requiredDuringInsert: true);
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+      'reason', aliasedName, false,
+      additionalChecks:
+          GeneratedColumn.checkTextLength(minTextLength: 1, maxTextLength: 240),
+      type: DriftSqlType.string,
+      requiredDuringInsert: true);
+  static const VerificationMeta _totalInvestedMeta =
+      const VerificationMeta('totalInvested');
+  @override
+  late final GeneratedColumn<int> totalInvested = GeneratedColumn<int>(
+      'total_invested', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _monthlyContributionMeta =
+      const VerificationMeta('monthlyContribution');
+  @override
+  late final GeneratedColumn<int> monthlyContribution = GeneratedColumn<int>(
+      'monthly_contribution', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _savingsRateMeta =
+      const VerificationMeta('savingsRate');
+  @override
+  late final GeneratedColumn<double> savingsRate = GeneratedColumn<double>(
+      'savings_rate', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _runwayMonthsMeta =
+      const VerificationMeta('runwayMonths');
+  @override
+  late final GeneratedColumn<double> runwayMonths = GeneratedColumn<double>(
+      'runway_months', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _contributionStreakMonthsMeta =
+      const VerificationMeta('contributionStreakMonths');
+  @override
+  late final GeneratedColumn<int> contributionStreakMonths =
+      GeneratedColumn<int>('contribution_streak_months', aliasedName, false,
+          type: DriftSqlType.int,
+          requiredDuringInsert: false,
+          defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        userId,
+        fromLevel,
+        toLevel,
+        xp,
+        stage,
+        reason,
+        totalInvested,
+        monthlyContribution,
+        savingsRate,
+        runwayMonths,
+        contributionStreakMonths,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pet_evolution_events';
+  @override
+  VerificationContext validateIntegrity(Insertable<PetEvolutionEvent> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('from_level')) {
+      context.handle(_fromLevelMeta,
+          fromLevel.isAcceptableOrUnknown(data['from_level']!, _fromLevelMeta));
+    }
+    if (data.containsKey('to_level')) {
+      context.handle(_toLevelMeta,
+          toLevel.isAcceptableOrUnknown(data['to_level']!, _toLevelMeta));
+    } else if (isInserting) {
+      context.missing(_toLevelMeta);
+    }
+    if (data.containsKey('xp')) {
+      context.handle(_xpMeta, xp.isAcceptableOrUnknown(data['xp']!, _xpMeta));
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+          _stageMeta, stage.isAcceptableOrUnknown(data['stage']!, _stageMeta));
+    } else if (isInserting) {
+      context.missing(_stageMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(_reasonMeta,
+          reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta));
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('total_invested')) {
+      context.handle(
+          _totalInvestedMeta,
+          totalInvested.isAcceptableOrUnknown(
+              data['total_invested']!, _totalInvestedMeta));
+    }
+    if (data.containsKey('monthly_contribution')) {
+      context.handle(
+          _monthlyContributionMeta,
+          monthlyContribution.isAcceptableOrUnknown(
+              data['monthly_contribution']!, _monthlyContributionMeta));
+    }
+    if (data.containsKey('savings_rate')) {
+      context.handle(
+          _savingsRateMeta,
+          savingsRate.isAcceptableOrUnknown(
+              data['savings_rate']!, _savingsRateMeta));
+    }
+    if (data.containsKey('runway_months')) {
+      context.handle(
+          _runwayMonthsMeta,
+          runwayMonths.isAcceptableOrUnknown(
+              data['runway_months']!, _runwayMonthsMeta));
+    }
+    if (data.containsKey('contribution_streak_months')) {
+      context.handle(
+          _contributionStreakMonthsMeta,
+          contributionStreakMonths.isAcceptableOrUnknown(
+              data['contribution_streak_months']!,
+              _contributionStreakMonthsMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PetEvolutionEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PetEvolutionEvent(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_id'])!,
+      fromLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}from_level']),
+      toLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}to_level'])!,
+      xp: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}xp'])!,
+      stage: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}stage'])!,
+      reason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}reason'])!,
+      totalInvested: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}total_invested'])!,
+      monthlyContribution: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}monthly_contribution'])!,
+      savingsRate: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}savings_rate'])!,
+      runwayMonths: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}runway_months'])!,
+      contributionStreakMonths: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}contribution_streak_months'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $PetEvolutionEventsTable createAlias(String alias) {
+    return $PetEvolutionEventsTable(attachedDatabase, alias);
+  }
+}
+
+class PetEvolutionEvent extends DataClass
+    implements Insertable<PetEvolutionEvent> {
+  final int id;
+  final int userId;
+  final int? fromLevel;
+  final int toLevel;
+  final int xp;
+  final String stage;
+  final String reason;
+  final int totalInvested;
+  final int monthlyContribution;
+  final double savingsRate;
+  final double runwayMonths;
+  final int contributionStreakMonths;
+  final DateTime createdAt;
+  const PetEvolutionEvent(
+      {required this.id,
+      required this.userId,
+      this.fromLevel,
+      required this.toLevel,
+      required this.xp,
+      required this.stage,
+      required this.reason,
+      required this.totalInvested,
+      required this.monthlyContribution,
+      required this.savingsRate,
+      required this.runwayMonths,
+      required this.contributionStreakMonths,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    if (!nullToAbsent || fromLevel != null) {
+      map['from_level'] = Variable<int>(fromLevel);
+    }
+    map['to_level'] = Variable<int>(toLevel);
+    map['xp'] = Variable<int>(xp);
+    map['stage'] = Variable<String>(stage);
+    map['reason'] = Variable<String>(reason);
+    map['total_invested'] = Variable<int>(totalInvested);
+    map['monthly_contribution'] = Variable<int>(monthlyContribution);
+    map['savings_rate'] = Variable<double>(savingsRate);
+    map['runway_months'] = Variable<double>(runwayMonths);
+    map['contribution_streak_months'] = Variable<int>(contributionStreakMonths);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PetEvolutionEventsCompanion toCompanion(bool nullToAbsent) {
+    return PetEvolutionEventsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      fromLevel: fromLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fromLevel),
+      toLevel: Value(toLevel),
+      xp: Value(xp),
+      stage: Value(stage),
+      reason: Value(reason),
+      totalInvested: Value(totalInvested),
+      monthlyContribution: Value(monthlyContribution),
+      savingsRate: Value(savingsRate),
+      runwayMonths: Value(runwayMonths),
+      contributionStreakMonths: Value(contributionStreakMonths),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PetEvolutionEvent.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PetEvolutionEvent(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      fromLevel: serializer.fromJson<int?>(json['fromLevel']),
+      toLevel: serializer.fromJson<int>(json['toLevel']),
+      xp: serializer.fromJson<int>(json['xp']),
+      stage: serializer.fromJson<String>(json['stage']),
+      reason: serializer.fromJson<String>(json['reason']),
+      totalInvested: serializer.fromJson<int>(json['totalInvested']),
+      monthlyContribution:
+          serializer.fromJson<int>(json['monthlyContribution']),
+      savingsRate: serializer.fromJson<double>(json['savingsRate']),
+      runwayMonths: serializer.fromJson<double>(json['runwayMonths']),
+      contributionStreakMonths:
+          serializer.fromJson<int>(json['contributionStreakMonths']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'fromLevel': serializer.toJson<int?>(fromLevel),
+      'toLevel': serializer.toJson<int>(toLevel),
+      'xp': serializer.toJson<int>(xp),
+      'stage': serializer.toJson<String>(stage),
+      'reason': serializer.toJson<String>(reason),
+      'totalInvested': serializer.toJson<int>(totalInvested),
+      'monthlyContribution': serializer.toJson<int>(monthlyContribution),
+      'savingsRate': serializer.toJson<double>(savingsRate),
+      'runwayMonths': serializer.toJson<double>(runwayMonths),
+      'contributionStreakMonths':
+          serializer.toJson<int>(contributionStreakMonths),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PetEvolutionEvent copyWith(
+          {int? id,
+          int? userId,
+          Value<int?> fromLevel = const Value.absent(),
+          int? toLevel,
+          int? xp,
+          String? stage,
+          String? reason,
+          int? totalInvested,
+          int? monthlyContribution,
+          double? savingsRate,
+          double? runwayMonths,
+          int? contributionStreakMonths,
+          DateTime? createdAt}) =>
+      PetEvolutionEvent(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        fromLevel: fromLevel.present ? fromLevel.value : this.fromLevel,
+        toLevel: toLevel ?? this.toLevel,
+        xp: xp ?? this.xp,
+        stage: stage ?? this.stage,
+        reason: reason ?? this.reason,
+        totalInvested: totalInvested ?? this.totalInvested,
+        monthlyContribution: monthlyContribution ?? this.monthlyContribution,
+        savingsRate: savingsRate ?? this.savingsRate,
+        runwayMonths: runwayMonths ?? this.runwayMonths,
+        contributionStreakMonths:
+            contributionStreakMonths ?? this.contributionStreakMonths,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  PetEvolutionEvent copyWithCompanion(PetEvolutionEventsCompanion data) {
+    return PetEvolutionEvent(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      fromLevel: data.fromLevel.present ? data.fromLevel.value : this.fromLevel,
+      toLevel: data.toLevel.present ? data.toLevel.value : this.toLevel,
+      xp: data.xp.present ? data.xp.value : this.xp,
+      stage: data.stage.present ? data.stage.value : this.stage,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      totalInvested: data.totalInvested.present
+          ? data.totalInvested.value
+          : this.totalInvested,
+      monthlyContribution: data.monthlyContribution.present
+          ? data.monthlyContribution.value
+          : this.monthlyContribution,
+      savingsRate:
+          data.savingsRate.present ? data.savingsRate.value : this.savingsRate,
+      runwayMonths: data.runwayMonths.present
+          ? data.runwayMonths.value
+          : this.runwayMonths,
+      contributionStreakMonths: data.contributionStreakMonths.present
+          ? data.contributionStreakMonths.value
+          : this.contributionStreakMonths,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PetEvolutionEvent(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('fromLevel: $fromLevel, ')
+          ..write('toLevel: $toLevel, ')
+          ..write('xp: $xp, ')
+          ..write('stage: $stage, ')
+          ..write('reason: $reason, ')
+          ..write('totalInvested: $totalInvested, ')
+          ..write('monthlyContribution: $monthlyContribution, ')
+          ..write('savingsRate: $savingsRate, ')
+          ..write('runwayMonths: $runwayMonths, ')
+          ..write('contributionStreakMonths: $contributionStreakMonths, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      userId,
+      fromLevel,
+      toLevel,
+      xp,
+      stage,
+      reason,
+      totalInvested,
+      monthlyContribution,
+      savingsRate,
+      runwayMonths,
+      contributionStreakMonths,
+      createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PetEvolutionEvent &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.fromLevel == this.fromLevel &&
+          other.toLevel == this.toLevel &&
+          other.xp == this.xp &&
+          other.stage == this.stage &&
+          other.reason == this.reason &&
+          other.totalInvested == this.totalInvested &&
+          other.monthlyContribution == this.monthlyContribution &&
+          other.savingsRate == this.savingsRate &&
+          other.runwayMonths == this.runwayMonths &&
+          other.contributionStreakMonths == this.contributionStreakMonths &&
+          other.createdAt == this.createdAt);
+}
+
+class PetEvolutionEventsCompanion extends UpdateCompanion<PetEvolutionEvent> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<int?> fromLevel;
+  final Value<int> toLevel;
+  final Value<int> xp;
+  final Value<String> stage;
+  final Value<String> reason;
+  final Value<int> totalInvested;
+  final Value<int> monthlyContribution;
+  final Value<double> savingsRate;
+  final Value<double> runwayMonths;
+  final Value<int> contributionStreakMonths;
+  final Value<DateTime> createdAt;
+  const PetEvolutionEventsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.fromLevel = const Value.absent(),
+    this.toLevel = const Value.absent(),
+    this.xp = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.totalInvested = const Value.absent(),
+    this.monthlyContribution = const Value.absent(),
+    this.savingsRate = const Value.absent(),
+    this.runwayMonths = const Value.absent(),
+    this.contributionStreakMonths = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PetEvolutionEventsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    this.fromLevel = const Value.absent(),
+    required int toLevel,
+    this.xp = const Value.absent(),
+    required String stage,
+    required String reason,
+    this.totalInvested = const Value.absent(),
+    this.monthlyContribution = const Value.absent(),
+    this.savingsRate = const Value.absent(),
+    this.runwayMonths = const Value.absent(),
+    this.contributionStreakMonths = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  })  : userId = Value(userId),
+        toLevel = Value(toLevel),
+        stage = Value(stage),
+        reason = Value(reason);
+  static Insertable<PetEvolutionEvent> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<int>? fromLevel,
+    Expression<int>? toLevel,
+    Expression<int>? xp,
+    Expression<String>? stage,
+    Expression<String>? reason,
+    Expression<int>? totalInvested,
+    Expression<int>? monthlyContribution,
+    Expression<double>? savingsRate,
+    Expression<double>? runwayMonths,
+    Expression<int>? contributionStreakMonths,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (fromLevel != null) 'from_level': fromLevel,
+      if (toLevel != null) 'to_level': toLevel,
+      if (xp != null) 'xp': xp,
+      if (stage != null) 'stage': stage,
+      if (reason != null) 'reason': reason,
+      if (totalInvested != null) 'total_invested': totalInvested,
+      if (monthlyContribution != null)
+        'monthly_contribution': monthlyContribution,
+      if (savingsRate != null) 'savings_rate': savingsRate,
+      if (runwayMonths != null) 'runway_months': runwayMonths,
+      if (contributionStreakMonths != null)
+        'contribution_streak_months': contributionStreakMonths,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PetEvolutionEventsCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? userId,
+      Value<int?>? fromLevel,
+      Value<int>? toLevel,
+      Value<int>? xp,
+      Value<String>? stage,
+      Value<String>? reason,
+      Value<int>? totalInvested,
+      Value<int>? monthlyContribution,
+      Value<double>? savingsRate,
+      Value<double>? runwayMonths,
+      Value<int>? contributionStreakMonths,
+      Value<DateTime>? createdAt}) {
+    return PetEvolutionEventsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      fromLevel: fromLevel ?? this.fromLevel,
+      toLevel: toLevel ?? this.toLevel,
+      xp: xp ?? this.xp,
+      stage: stage ?? this.stage,
+      reason: reason ?? this.reason,
+      totalInvested: totalInvested ?? this.totalInvested,
+      monthlyContribution: monthlyContribution ?? this.monthlyContribution,
+      savingsRate: savingsRate ?? this.savingsRate,
+      runwayMonths: runwayMonths ?? this.runwayMonths,
+      contributionStreakMonths:
+          contributionStreakMonths ?? this.contributionStreakMonths,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (fromLevel.present) {
+      map['from_level'] = Variable<int>(fromLevel.value);
+    }
+    if (toLevel.present) {
+      map['to_level'] = Variable<int>(toLevel.value);
+    }
+    if (xp.present) {
+      map['xp'] = Variable<int>(xp.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<String>(stage.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (totalInvested.present) {
+      map['total_invested'] = Variable<int>(totalInvested.value);
+    }
+    if (monthlyContribution.present) {
+      map['monthly_contribution'] = Variable<int>(monthlyContribution.value);
+    }
+    if (savingsRate.present) {
+      map['savings_rate'] = Variable<double>(savingsRate.value);
+    }
+    if (runwayMonths.present) {
+      map['runway_months'] = Variable<double>(runwayMonths.value);
+    }
+    if (contributionStreakMonths.present) {
+      map['contribution_streak_months'] =
+          Variable<int>(contributionStreakMonths.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PetEvolutionEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('fromLevel: $fromLevel, ')
+          ..write('toLevel: $toLevel, ')
+          ..write('xp: $xp, ')
+          ..write('stage: $stage, ')
+          ..write('reason: $reason, ')
+          ..write('totalInvested: $totalInvested, ')
+          ..write('monthlyContribution: $monthlyContribution, ')
+          ..write('savingsRate: $savingsRate, ')
+          ..write('runwayMonths: $runwayMonths, ')
+          ..write('contributionStreakMonths: $contributionStreakMonths, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $BackupLogsTable extends BackupLogs
     with TableInfo<$BackupLogsTable, BackupLog> {
   @override
@@ -7201,6 +7850,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MonthlyPlansTable monthlyPlans = $MonthlyPlansTable(this);
   late final $InvestmentsTable investments = $InvestmentsTable(this);
   late final $PetProgressTable petProgress = $PetProgressTable(this);
+  late final $PetEvolutionEventsTable petEvolutionEvents =
+      $PetEvolutionEventsTable(this);
   late final $BackupLogsTable backupLogs = $BackupLogsTable(this);
   late final $TransfersTable transfers = $TransfersTable(this);
   late final $ExchangeRatesTable exchangeRates = $ExchangeRatesTable(this);
@@ -7231,6 +7882,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         monthlyPlans,
         investments,
         petProgress,
+        petEvolutionEvents,
         backupLogs,
         transfers,
         exchangeRates
@@ -7355,6 +8007,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('pet_progress', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('users',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('pet_evolution_events', kind: UpdateKind.delete),
             ],
           ),
           WritePropagation(
@@ -7525,6 +8184,23 @@ final class $$UsersTableReferences
         .filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_petProgressRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$PetEvolutionEventsTable, List<PetEvolutionEvent>>
+      _petEvolutionEventsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.petEvolutionEvents,
+              aliasName: $_aliasNameGenerator(
+                  db.users.id, db.petEvolutionEvents.userId));
+
+  $$PetEvolutionEventsTableProcessedTableManager get petEvolutionEventsRefs {
+    final manager =
+        $$PetEvolutionEventsTableTableManager($_db, $_db.petEvolutionEvents)
+            .filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_petEvolutionEventsRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -7764,6 +8440,27 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
             $$PetProgressTableFilterComposer(
               $db: $db,
               $table: $db.petProgress,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> petEvolutionEventsRefs(
+      Expression<bool> Function($$PetEvolutionEventsTableFilterComposer f) f) {
+    final $$PetEvolutionEventsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.petEvolutionEvents,
+        getReferencedColumn: (t) => t.userId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PetEvolutionEventsTableFilterComposer(
+              $db: $db,
+              $table: $db.petEvolutionEvents,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -8056,6 +8753,28 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> petEvolutionEventsRefs<T extends Object>(
+      Expression<T> Function($$PetEvolutionEventsTableAnnotationComposer a) f) {
+    final $$PetEvolutionEventsTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.petEvolutionEvents,
+            getReferencedColumn: (t) => t.userId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$PetEvolutionEventsTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.petEvolutionEvents,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
+
   Expression<T> backupLogsRefs<T extends Object>(
       Expression<T> Function($$BackupLogsTableAnnotationComposer a) f) {
     final $$BackupLogsTableAnnotationComposer composer = $composerBuilder(
@@ -8120,6 +8839,7 @@ class $$UsersTableTableManager extends RootTableManager<
         bool monthlyPlansRefs,
         bool investmentsRefs,
         bool petProgressRefs,
+        bool petEvolutionEventsRefs,
         bool backupLogsRefs,
         bool transfersRefs})> {
   $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
@@ -8174,6 +8894,7 @@ class $$UsersTableTableManager extends RootTableManager<
               monthlyPlansRefs = false,
               investmentsRefs = false,
               petProgressRefs = false,
+              petEvolutionEventsRefs = false,
               backupLogsRefs = false,
               transfersRefs = false}) {
             return PrefetchHooks(
@@ -8188,6 +8909,7 @@ class $$UsersTableTableManager extends RootTableManager<
                 if (monthlyPlansRefs) db.monthlyPlans,
                 if (investmentsRefs) db.investments,
                 if (petProgressRefs) db.petProgress,
+                if (petEvolutionEventsRefs) db.petEvolutionEvents,
                 if (backupLogsRefs) db.backupLogs,
                 if (transfersRefs) db.transfers
               ],
@@ -8304,6 +9026,19 @@ class $$UsersTableTableManager extends RootTableManager<
                                 referencedItems) =>
                             referencedItems.where((e) => e.userId == item.id),
                         typedResults: items),
+                  if (petEvolutionEventsRefs)
+                    await $_getPrefetchedData<User, $UsersTable,
+                            PetEvolutionEvent>(
+                        currentTable: table,
+                        referencedTable: $$UsersTableReferences
+                            ._petEvolutionEventsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$UsersTableReferences(db, table, p0)
+                                .petEvolutionEventsRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.userId == item.id),
+                        typedResults: items),
                   if (backupLogsRefs)
                     await $_getPrefetchedData<User, $UsersTable, BackupLog>(
                         currentTable: table,
@@ -8356,6 +9091,7 @@ typedef $$UsersTableProcessedTableManager = ProcessedTableManager<
         bool monthlyPlansRefs,
         bool investmentsRefs,
         bool petProgressRefs,
+        bool petEvolutionEventsRefs,
         bool backupLogsRefs,
         bool transfersRefs})>;
 typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
@@ -13286,6 +14022,403 @@ typedef $$PetProgressTableProcessedTableManager = ProcessedTableManager<
     (PetProgressData, $$PetProgressTableReferences),
     PetProgressData,
     PrefetchHooks Function({bool userId})>;
+typedef $$PetEvolutionEventsTableCreateCompanionBuilder
+    = PetEvolutionEventsCompanion Function({
+  Value<int> id,
+  required int userId,
+  Value<int?> fromLevel,
+  required int toLevel,
+  Value<int> xp,
+  required String stage,
+  required String reason,
+  Value<int> totalInvested,
+  Value<int> monthlyContribution,
+  Value<double> savingsRate,
+  Value<double> runwayMonths,
+  Value<int> contributionStreakMonths,
+  Value<DateTime> createdAt,
+});
+typedef $$PetEvolutionEventsTableUpdateCompanionBuilder
+    = PetEvolutionEventsCompanion Function({
+  Value<int> id,
+  Value<int> userId,
+  Value<int?> fromLevel,
+  Value<int> toLevel,
+  Value<int> xp,
+  Value<String> stage,
+  Value<String> reason,
+  Value<int> totalInvested,
+  Value<int> monthlyContribution,
+  Value<double> savingsRate,
+  Value<double> runwayMonths,
+  Value<int> contributionStreakMonths,
+  Value<DateTime> createdAt,
+});
+
+final class $$PetEvolutionEventsTableReferences extends BaseReferences<
+    _$AppDatabase, $PetEvolutionEventsTable, PetEvolutionEvent> {
+  $$PetEvolutionEventsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+      $_aliasNameGenerator(db.petEvolutionEvents.userId, db.users.id));
+
+  $$UsersTableProcessedTableManager get userId {
+    final $_column = $_itemColumn<int>('user_id')!;
+
+    final manager = $$UsersTableTableManager($_db, $_db.users)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$PetEvolutionEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $PetEvolutionEventsTable> {
+  $$PetEvolutionEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get fromLevel => $composableBuilder(
+      column: $table.fromLevel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get toLevel => $composableBuilder(
+      column: $table.toLevel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get xp => $composableBuilder(
+      column: $table.xp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stage => $composableBuilder(
+      column: $table.stage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get reason => $composableBuilder(
+      column: $table.reason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get totalInvested => $composableBuilder(
+      column: $table.totalInvested, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get monthlyContribution => $composableBuilder(
+      column: $table.monthlyContribution,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get savingsRate => $composableBuilder(
+      column: $table.savingsRate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get runwayMonths => $composableBuilder(
+      column: $table.runwayMonths, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get contributionStreakMonths => $composableBuilder(
+      column: $table.contributionStreakMonths,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableFilterComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PetEvolutionEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PetEvolutionEventsTable> {
+  $$PetEvolutionEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get fromLevel => $composableBuilder(
+      column: $table.fromLevel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get toLevel => $composableBuilder(
+      column: $table.toLevel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get xp => $composableBuilder(
+      column: $table.xp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stage => $composableBuilder(
+      column: $table.stage, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+      column: $table.reason, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get totalInvested => $composableBuilder(
+      column: $table.totalInvested,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get monthlyContribution => $composableBuilder(
+      column: $table.monthlyContribution,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get savingsRate => $composableBuilder(
+      column: $table.savingsRate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get runwayMonths => $composableBuilder(
+      column: $table.runwayMonths,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get contributionStreakMonths => $composableBuilder(
+      column: $table.contributionStreakMonths,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableOrderingComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PetEvolutionEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PetEvolutionEventsTable> {
+  $$PetEvolutionEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get fromLevel =>
+      $composableBuilder(column: $table.fromLevel, builder: (column) => column);
+
+  GeneratedColumn<int> get toLevel =>
+      $composableBuilder(column: $table.toLevel, builder: (column) => column);
+
+  GeneratedColumn<int> get xp =>
+      $composableBuilder(column: $table.xp, builder: (column) => column);
+
+  GeneratedColumn<String> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<int> get totalInvested => $composableBuilder(
+      column: $table.totalInvested, builder: (column) => column);
+
+  GeneratedColumn<int> get monthlyContribution => $composableBuilder(
+      column: $table.monthlyContribution, builder: (column) => column);
+
+  GeneratedColumn<double> get savingsRate => $composableBuilder(
+      column: $table.savingsRate, builder: (column) => column);
+
+  GeneratedColumn<double> get runwayMonths => $composableBuilder(
+      column: $table.runwayMonths, builder: (column) => column);
+
+  GeneratedColumn<int> get contributionStreakMonths => $composableBuilder(
+      column: $table.contributionStreakMonths, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PetEvolutionEventsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PetEvolutionEventsTable,
+    PetEvolutionEvent,
+    $$PetEvolutionEventsTableFilterComposer,
+    $$PetEvolutionEventsTableOrderingComposer,
+    $$PetEvolutionEventsTableAnnotationComposer,
+    $$PetEvolutionEventsTableCreateCompanionBuilder,
+    $$PetEvolutionEventsTableUpdateCompanionBuilder,
+    (PetEvolutionEvent, $$PetEvolutionEventsTableReferences),
+    PetEvolutionEvent,
+    PrefetchHooks Function({bool userId})> {
+  $$PetEvolutionEventsTableTableManager(
+      _$AppDatabase db, $PetEvolutionEventsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PetEvolutionEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PetEvolutionEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PetEvolutionEventsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> userId = const Value.absent(),
+            Value<int?> fromLevel = const Value.absent(),
+            Value<int> toLevel = const Value.absent(),
+            Value<int> xp = const Value.absent(),
+            Value<String> stage = const Value.absent(),
+            Value<String> reason = const Value.absent(),
+            Value<int> totalInvested = const Value.absent(),
+            Value<int> monthlyContribution = const Value.absent(),
+            Value<double> savingsRate = const Value.absent(),
+            Value<double> runwayMonths = const Value.absent(),
+            Value<int> contributionStreakMonths = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              PetEvolutionEventsCompanion(
+            id: id,
+            userId: userId,
+            fromLevel: fromLevel,
+            toLevel: toLevel,
+            xp: xp,
+            stage: stage,
+            reason: reason,
+            totalInvested: totalInvested,
+            monthlyContribution: monthlyContribution,
+            savingsRate: savingsRate,
+            runwayMonths: runwayMonths,
+            contributionStreakMonths: contributionStreakMonths,
+            createdAt: createdAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int userId,
+            Value<int?> fromLevel = const Value.absent(),
+            required int toLevel,
+            Value<int> xp = const Value.absent(),
+            required String stage,
+            required String reason,
+            Value<int> totalInvested = const Value.absent(),
+            Value<int> monthlyContribution = const Value.absent(),
+            Value<double> savingsRate = const Value.absent(),
+            Value<double> runwayMonths = const Value.absent(),
+            Value<int> contributionStreakMonths = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              PetEvolutionEventsCompanion.insert(
+            id: id,
+            userId: userId,
+            fromLevel: fromLevel,
+            toLevel: toLevel,
+            xp: xp,
+            stage: stage,
+            reason: reason,
+            totalInvested: totalInvested,
+            monthlyContribution: monthlyContribution,
+            savingsRate: savingsRate,
+            runwayMonths: runwayMonths,
+            contributionStreakMonths: contributionStreakMonths,
+            createdAt: createdAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$PetEvolutionEventsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (userId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.userId,
+                    referencedTable:
+                        $$PetEvolutionEventsTableReferences._userIdTable(db),
+                    referencedColumn:
+                        $$PetEvolutionEventsTableReferences._userIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$PetEvolutionEventsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $PetEvolutionEventsTable,
+    PetEvolutionEvent,
+    $$PetEvolutionEventsTableFilterComposer,
+    $$PetEvolutionEventsTableOrderingComposer,
+    $$PetEvolutionEventsTableAnnotationComposer,
+    $$PetEvolutionEventsTableCreateCompanionBuilder,
+    $$PetEvolutionEventsTableUpdateCompanionBuilder,
+    (PetEvolutionEvent, $$PetEvolutionEventsTableReferences),
+    PetEvolutionEvent,
+    PrefetchHooks Function({bool userId})>;
 typedef $$BackupLogsTableCreateCompanionBuilder = BackupLogsCompanion Function({
   Value<int> id,
   required int userId,
@@ -14433,6 +15566,8 @@ class $AppDatabaseManager {
       $$InvestmentsTableTableManager(_db, _db.investments);
   $$PetProgressTableTableManager get petProgress =>
       $$PetProgressTableTableManager(_db, _db.petProgress);
+  $$PetEvolutionEventsTableTableManager get petEvolutionEvents =>
+      $$PetEvolutionEventsTableTableManager(_db, _db.petEvolutionEvents);
   $$BackupLogsTableTableManager get backupLogs =>
       $$BackupLogsTableTableManager(_db, _db.backupLogs);
   $$TransfersTableTableManager get transfers =>

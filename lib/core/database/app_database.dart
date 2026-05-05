@@ -22,6 +22,7 @@ import 'tables/credit_cards_table.dart';
 import 'tables/exchange_rates_table.dart';
 import 'tables/investments_table.dart';
 import 'tables/monthly_plans_table.dart';
+import 'tables/pet_evolution_events_table.dart';
 import 'tables/pet_progress_table.dart';
 import 'tables/subcategories_table.dart';
 import 'tables/transactions_table.dart';
@@ -42,6 +43,7 @@ part 'app_database.g.dart';
     MonthlyPlans,
     Investments,
     PetProgress,
+    PetEvolutionEvents,
     BackupLogs,
     Transfers,
     ExchangeRates,
@@ -61,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -258,6 +260,13 @@ class AppDatabase extends _$AppDatabase {
               migrator,
               tableName: 'exchange_rates',
               createTable: () => migrator.createTable(exchangeRates),
+            );
+          }
+          if (from < 10) {
+            await _createTableIfMissing(
+              migrator,
+              tableName: 'pet_evolution_events',
+              createTable: () => migrator.createTable(petEvolutionEvents),
             );
           }
         },

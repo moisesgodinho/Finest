@@ -355,7 +355,7 @@ class _HomeDashboard extends ConsumerWidget {
             _CategoriesCard(
               categories: state.categories,
               currencyCode: state.currencyCode,
-              onViewReport: () => context.push(AppRoutes.categories),
+              onViewReport: () => context.push(AppRoutes.reports),
             ),
             const SizedBox(height: 18),
             _RecentTransactionsCard(transactions: state.recentTransactions),

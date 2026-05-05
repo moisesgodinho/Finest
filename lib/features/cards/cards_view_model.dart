@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/currency/currency_controller.dart';
+import '../../core/currency/exchange_rate_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/account_preview.dart';
@@ -28,6 +30,7 @@ class CardsState {
     required this.invoices,
     required this.categories,
     required this.subcategories,
+    this.currencyCode = 'BRL',
     this.isLoading = false,
     this.errorMessage,
   });
@@ -37,6 +40,7 @@ class CardsState {
   final List<CreditCardInvoicePreview> invoices;
   final List<CategoryModel> categories;
   final List<SubcategoryModel> subcategories;
+  final String currencyCode;
   final bool isLoading;
   final String? errorMessage;
 
@@ -78,6 +82,8 @@ class CardsState {
       month: month,
       year: year,
       amountCents: 0,
+      currencyCode: card.currencyCode,
+      displayAmountCents: 0,
       status: 'open',
       statusLabel: 'Aberta',
       dueDate: DateTime(year, month, _safeDay(year, month, card.dueDay)),
@@ -119,13 +125,14 @@ class CardsState {
   int get totalInvoicesCents {
     return invoices
         .where((invoice) => !invoice.isPaid)
-        .fold<int>(0, (total, invoice) => total + invoice.amountCents);
+        .fold<int>(0, (total, invoice) => total + invoice.displayAmountCents);
   }
 
   int get availableLimitCents {
     return cards.fold<int>(
       0,
-      (total, card) => total + (card.limitCents - card.invoiceCents),
+      (total, card) =>
+          total + (card.displayLimitCents - card.displayInvoiceCents),
     );
   }
 
@@ -135,6 +142,7 @@ class CardsState {
     List<CreditCardInvoicePreview>? invoices,
     List<CategoryModel>? categories,
     List<SubcategoryModel>? subcategories,
+    String? currencyCode,
     bool? isLoading,
     String? errorMessage,
     bool clearError = false,
@@ -145,6 +153,7 @@ class CardsState {
       invoices: invoices ?? this.invoices,
       categories: categories ?? this.categories,
       subcategories: subcategories ?? this.subcategories,
+      currencyCode: currencyCode ?? this.currencyCode,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
@@ -163,18 +172,23 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required CategoryRepository categoryRepository,
     required CreditCardRepository creditCardRepository,
     required TransactionRepository transactionRepository,
+    required ExchangeRateService exchangeRateService,
+    required String currencyCode,
   })  : _userId = userId,
         _accountRepository = accountRepository,
         _categoryRepository = categoryRepository,
         _creditCardRepository = creditCardRepository,
         _transactionRepository = transactionRepository,
+        _exchangeRateService = exchangeRateService,
+        _currencyCode = currencyCode,
         super(
-          const CardsState(
-            cards: [],
-            accounts: [],
-            invoices: [],
-            categories: [],
-            subcategories: [],
+          CardsState(
+            cards: const [],
+            accounts: const [],
+            invoices: const [],
+            categories: const [],
+            subcategories: const [],
+            currencyCode: currencyCode,
             isLoading: true,
           ),
         ) {
@@ -186,6 +200,8 @@ class CardsViewModel extends StateNotifier<CardsState> {
   final CategoryRepository _categoryRepository;
   final CreditCardRepository _creditCardRepository;
   final TransactionRepository _transactionRepository;
+  final ExchangeRateService _exchangeRateService;
+  final String _currencyCode;
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<CreditCard>>? _cardsSubscription;
   StreamSubscription<List<CreditCardInvoice>>? _invoicesSubscription;
@@ -259,6 +275,18 @@ class CardsViewModel extends StateNotifier<CardsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
+      final newDefaultAccount = _accounts
+          .where((account) => account.id == defaultPaymentAccountId)
+          .firstOrNull;
+      if (newDefaultAccount != null &&
+          newDefaultAccount.currencyCode.toUpperCase() !=
+              card.currencyCode.toUpperCase() &&
+          _cardHasFinancialEntries(card.id)) {
+        throw StateError(
+          'Este cartÃ£o jÃ¡ possui faturas ou compras. Para mudar a moeda, crie um novo cartÃ£o vinculado Ã nova conta.',
+        );
+      }
+
       await _creditCardRepository.updateCard(
         UpdateCreditCardRequest(
           id: card.id,
@@ -588,12 +616,13 @@ class CardsViewModel extends StateNotifier<CardsState> {
   void _watchData() {
     final userId = _userId;
     if (userId == null) {
-      state = const CardsState(
-        cards: [],
-        accounts: [],
-        invoices: [],
-        categories: [],
-        subcategories: [],
+      state = CardsState(
+        cards: const [],
+        accounts: const [],
+        invoices: const [],
+        categories: const [],
+        subcategories: const [],
+        currencyCode: _currencyCode,
       );
       return;
     }
@@ -650,7 +679,8 @@ class CardsViewModel extends StateNotifier<CardsState> {
     );
   }
 
-  void _publishState() {
+  Future<void> _publishState() async {
+    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
     final accountsById = {for (final account in _accounts) account.id: account};
     final cardsById = {for (final card in _cards) card.id: card};
     final categoriesById = {
@@ -672,6 +702,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
             card,
             accountsById,
             currentInvoiceCents: currentInvoiceTotalsByCard[card.id],
+            ratesToBrl: ratesToBrl,
           ),
       ],
       categories: _categories,
@@ -681,7 +712,9 @@ class CardsViewModel extends StateNotifier<CardsState> {
         accountsById: accountsById,
         categoriesById: categoriesById,
         subcategoriesById: subcategoriesById,
+        ratesToBrl: ratesToBrl,
       ),
+      currencyCode: _currencyCode,
       isLoading: false,
       clearError: true,
     );
@@ -728,6 +761,18 @@ class CardsViewModel extends StateNotifier<CardsState> {
     };
   }
 
+  bool _cardHasFinancialEntries(int cardId) {
+    final hasTransactions = _transactions.any(
+      (transaction) =>
+          transaction.paymentMethod == 'credit_card' &&
+          transaction.creditCardId == cardId,
+    );
+    final hasInvoices = _invoices.any(
+      (invoice) => invoice.creditCardId == cardId && invoice.amount > 0,
+    );
+    return hasTransactions || hasInvoices;
+  }
+
   AccountPreview _mapAccount(Account account) {
     return AccountPreview(
       id: account.id,
@@ -747,9 +792,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
     CreditCard card,
     Map<int, Account> accountsById, {
     int? currentInvoiceCents,
+    required Map<String, double> ratesToBrl,
   }) {
     final defaultAccount = accountsById[card.defaultPaymentAccountId];
     final invoiceCents = currentInvoiceCents ?? card.currentInvoice;
+    final currencyCode = defaultAccount?.currencyCode ?? 'BRL';
     final usedPercent = card.limit == 0 ? 0.0 : invoiceCents / card.limit;
 
     return CreditCardPreview(
@@ -761,6 +808,17 @@ class CardsViewModel extends StateNotifier<CardsState> {
       brandLabel: _brandLabel(card.brand),
       invoiceCents: invoiceCents,
       limitCents: card.limit,
+      currencyCode: currencyCode,
+      displayInvoiceCents: _convertCents(
+        amountCents: invoiceCents,
+        fromCurrency: currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
+      displayLimitCents: _convertCents(
+        amountCents: card.limit,
+        fromCurrency: currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       usedPercent: usedPercent.clamp(0.0, 1.0).toDouble(),
       color: _parseColor(card.color),
       colorHex: card.color,
@@ -778,8 +836,12 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required Map<int, Account> accountsById,
     required Map<int, CategoryModel> categoriesById,
     required Map<int, SubcategoryModel> subcategoriesById,
+    required Map<String, double> ratesToBrl,
   }) {
     final account = accountsById[invoice.paymentAccountId];
+    final defaultAccount = accountsById[card.defaultPaymentAccountId];
+    final currencyCode =
+        account?.currencyCode ?? defaultAccount?.currencyCode ?? 'BRL';
     final transactions = _creditCardTransactionsFor(
       cardId: invoice.creditCardId,
       month: invoice.month,
@@ -809,6 +871,12 @@ class CardsViewModel extends StateNotifier<CardsState> {
       month: invoice.month,
       year: invoice.year,
       amountCents: invoiceAmount,
+      currencyCode: currencyCode,
+      displayAmountCents: _convertCents(
+        amountCents: invoiceAmount,
+        fromCurrency: currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       status: effectiveStatus,
       statusLabel: _invoiceStatusLabel(effectiveStatus),
       dueDate: invoice.dueDate,
@@ -822,6 +890,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
             transaction,
             categoriesById: categoriesById,
             subcategoriesById: subcategoriesById,
+            ratesToBrl: ratesToBrl,
           ),
       ],
     );
@@ -832,6 +901,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required Map<int, Account> accountsById,
     required Map<int, CategoryModel> categoriesById,
     required Map<int, SubcategoryModel> subcategoriesById,
+    required Map<String, double> ratesToBrl,
   }) {
     final mappedKeys = <String>{};
     final previews = <CreditCardInvoicePreview>[];
@@ -856,6 +926,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
           accountsById: accountsById,
           categoriesById: categoriesById,
           subcategoriesById: subcategoriesById,
+          ratesToBrl: ratesToBrl,
         ),
       );
     }
@@ -887,6 +958,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
           accountsById: accountsById,
           categoriesById: categoriesById,
           subcategoriesById: subcategoriesById,
+          ratesToBrl: ratesToBrl,
         ),
       );
     }
@@ -908,6 +980,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
     required Map<int, Account> accountsById,
     required Map<int, CategoryModel> categoriesById,
     required Map<int, SubcategoryModel> subcategoriesById,
+    required Map<String, double> ratesToBrl,
   }) {
     final transactions = _creditCardTransactionsFor(
       cardId: card.id,
@@ -929,6 +1002,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
         ? 'closed'
         : 'open';
     final paymentAccount = accountsById[card.defaultPaymentAccountId];
+    final currencyCode = paymentAccount?.currencyCode ?? 'BRL';
 
     return CreditCardInvoicePreview(
       id: 0,
@@ -938,6 +1012,12 @@ class CardsViewModel extends StateNotifier<CardsState> {
       month: month,
       year: year,
       amountCents: amount,
+      currencyCode: currencyCode,
+      displayAmountCents: _convertCents(
+        amountCents: amount,
+        fromCurrency: currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       status: status,
       statusLabel: _invoiceStatusLabel(status),
       dueDate: DateTime(year, month, _safeDay(year, month, card.dueDay)),
@@ -950,6 +1030,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
             transaction,
             categoriesById: categoriesById,
             subcategoriesById: subcategoriesById,
+            ratesToBrl: ratesToBrl,
           ),
       ],
     );
@@ -976,11 +1057,18 @@ class CardsViewModel extends StateNotifier<CardsState> {
     FinanceTransaction transaction, {
     required Map<int, CategoryModel> categoriesById,
     required Map<int, SubcategoryModel> subcategoriesById,
+    required Map<String, double> ratesToBrl,
   }) {
     return CreditCardInvoiceTransactionPreview(
       id: transaction.id,
       description: transaction.description,
       amountCents: transaction.amount,
+      currencyCode: transaction.currencyCode,
+      displayAmountCents: _convertCents(
+        amountCents: transaction.amount,
+        fromCurrency: transaction.currencyCode,
+        ratesToBrl: ratesToBrl,
+      ),
       date: transaction.date,
       categoryId: transaction.categoryId,
       categoryName: categoriesById[transaction.categoryId]?.name ?? 'Categoria',
@@ -1046,6 +1134,19 @@ class CardsViewModel extends StateNotifier<CardsState> {
     return parsed == null ? AppColors.primary : Color(parsed);
   }
 
+  int _convertCents({
+    required int amountCents,
+    required String fromCurrency,
+    required Map<String, double> ratesToBrl,
+  }) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: amountCents,
+      fromCurrency: fromCurrency,
+      toCurrency: _currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
   @override
   void dispose() {
     _accountsSubscription?.cancel();
@@ -1070,5 +1171,7 @@ final cardsViewModelProvider =
     categoryRepository: ref.watch(categoryRepositoryProvider),
     creditCardRepository: ref.watch(creditCardRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    exchangeRateService: ref.watch(exchangeRateServiceProvider),
+    currencyCode: ref.watch(currencyControllerProvider),
   );
 });

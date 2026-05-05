@@ -149,6 +149,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
               const SizedBox(height: 12),
               _PayInvoiceButton(
                 amountCents: invoice.amountCents,
+                currencyCode: invoice.currencyCode,
                 onPressed: () => _confirmPayInvoice(
                   context,
                   viewModel,
@@ -170,7 +171,10 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
             const SizedBox(height: 14),
             SectionCard(
               title: 'Gastos por categoria',
-              child: _CategorySpendingChart(spending: categorySpending),
+              child: _CategorySpendingChart(
+                spending: categorySpending,
+                currencyCode: invoice.currencyCode,
+              ),
             ),
             const SizedBox(height: 14),
             SectionCard(
@@ -337,7 +341,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
         return AlertDialog(
           title: const Text('Pagar fatura?'),
           content: Text(
-            'Serão debitados ${CurrencyUtils.formatCents(invoice.amountCents)} da conta ${invoice.paymentAccountName ?? 'padrão do cartão'}.',
+            'Serão debitados ${CurrencyUtils.formatCents(invoice.amountCents, currencyCode: invoice.currencyCode)} da conta ${invoice.paymentAccountName ?? 'padrão do cartão'}.',
           ),
           actions: [
             TextButton(
@@ -697,9 +701,11 @@ class _CategorySpending {
 class _CategorySpendingChart extends StatelessWidget {
   const _CategorySpendingChart({
     required this.spending,
+    required this.currencyCode,
   });
 
   final List<_CategorySpending> spending;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -741,7 +747,10 @@ class _CategorySpendingChart extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    CurrencyUtils.formatCents(chartTotal),
+                    CurrencyUtils.formatCents(
+                      chartTotal,
+                      currencyCode: currencyCode,
+                    ),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                         ),
@@ -758,6 +767,7 @@ class _CategorySpendingChart extends StatelessWidget {
               _CategorySpendingRow(
                 item: item,
                 totalCents: chartTotal,
+                currencyCode: currencyCode,
               ),
           ],
         ),
@@ -798,10 +808,12 @@ class _CategorySpendingRow extends StatelessWidget {
   const _CategorySpendingRow({
     required this.item,
     required this.totalCents,
+    required this.currencyCode,
   });
 
   final _CategorySpending item;
   final int totalCents;
+  final String currencyCode;
 
   @override
   Widget build(BuildContext context) {
@@ -839,7 +851,10 @@ class _CategorySpendingRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            CurrencyUtils.formatCents(item.amountCents),
+            CurrencyUtils.formatCents(
+              item.amountCents,
+              currencyCode: currencyCode,
+            ),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -1171,7 +1186,10 @@ class _InvoiceCreditCardVisual extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              CurrencyUtils.formatCents(invoice.amountCents),
+                              CurrencyUtils.formatCents(
+                                invoice.amountCents,
+                                currencyCode: invoice.currencyCode,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
@@ -1197,13 +1215,17 @@ class _InvoiceCreditCardVisual extends StatelessWidget {
                                 label: 'Disponível',
                                 value: CurrencyUtils.formatCents(
                                   _availableLimitCents,
+                                  currencyCode: invoice.currencyCode,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 10),
                             _InvoiceCardFooterDatum(
                               label: 'Limite total',
-                              value: CurrencyUtils.formatCents(card.limitCents),
+                              value: CurrencyUtils.formatCents(
+                                card.limitCents,
+                                currencyCode: card.currencyCode,
+                              ),
                               alignEnd: true,
                             ),
                           ],
@@ -1224,10 +1246,12 @@ class _InvoiceCreditCardVisual extends StatelessWidget {
 class _PayInvoiceButton extends StatelessWidget {
   const _PayInvoiceButton({
     required this.amountCents,
+    required this.currencyCode,
     required this.onPressed,
   });
 
   final int amountCents;
+  final String currencyCode;
   final VoidCallback onPressed;
 
   @override
@@ -1238,7 +1262,7 @@ class _PayInvoiceButton extends StatelessWidget {
         onPressed: onPressed,
         icon: const Icon(Icons.check_circle_rounded),
         label: Text(
-          'Marcar ${CurrencyUtils.formatCents(amountCents)} como pago',
+          'Marcar ${CurrencyUtils.formatCents(amountCents, currencyCode: currencyCode)} como pago',
         ),
       ),
     );
@@ -1628,8 +1652,14 @@ class _InvoicePurchaseTile extends StatelessWidget {
           const SizedBox(width: 8),
           _InvoiceTransactionAmountDate(
             amount: transaction.isCredit
-                ? '+ ${CurrencyUtils.formatCents(transaction.amountCents)}'
-                : CurrencyUtils.formatCents(transaction.amountCents),
+                ? '+ ${CurrencyUtils.formatCents(
+                    transaction.amountCents,
+                    currencyCode: transaction.currencyCode,
+                  )}'
+                : CurrencyUtils.formatCents(
+                    transaction.amountCents,
+                    currencyCode: transaction.currencyCode,
+                  ),
             date: _formatDate(transaction.date),
             amountColor: transaction.isCredit ? colors.success : null,
           ),

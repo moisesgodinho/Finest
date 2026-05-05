@@ -9,6 +9,7 @@ import '../../core/utils/date_utils.dart';
 import '../../data/models/account_preview.dart';
 import '../../shared/widgets/balance_card.dart';
 import '../../shared/widgets/section_card.dart';
+import '../transactions/transactions_view_model.dart';
 import 'accounts_view_model.dart';
 
 class AccountsPage extends ConsumerWidget {
@@ -80,10 +81,10 @@ class AccountsPage extends ConsumerWidget {
                           _AccountTile(
                             account: account,
                             displayCurrencyCode: state.currencyCode,
-                            onTap: () => _openAccountForm(
+                            onTap: () => _openAccountDetails(
                               context,
                               ref,
-                              account: account,
+                              account,
                             ),
                           ),
                       ],
@@ -127,6 +128,73 @@ class AccountsPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _openAccountDetails(
+    BuildContext context,
+    WidgetRef ref,
+    AccountPreview account,
+  ) async {
+    final shouldEdit = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        final accountsState = ref.read(accountsViewModelProvider);
+        final currentAccount = accountsState.accounts
+            .where((item) => item.id == account.id)
+            .firstOrNull;
+        final detailAccount = currentAccount ?? account;
+        final transactionsState = ref.read(transactionsViewModelProvider);
+
+        return _AccountDetailSheet(
+          account: detailAccount,
+          displayCurrencyCode: accountsState.currencyCode,
+          history: _accountHistoryFor(
+            transactionsState.transactions,
+            detailAccount.id,
+          ),
+          onEdit: () {
+            Navigator.of(sheetContext).pop(true);
+          },
+        );
+      },
+    );
+
+    if (shouldEdit != true || !context.mounted) {
+      return;
+    }
+
+    final currentAccount = ref
+        .read(accountsViewModelProvider)
+        .accounts
+        .where((item) => item.id == account.id)
+        .firstOrNull;
+    await _openAccountForm(
+      context,
+      ref,
+      account: currentAccount ?? account,
+    );
+  }
+
+  List<TransactionListItem> _accountHistoryFor(
+    List<TransactionListItem> transactions,
+    int accountId,
+  ) {
+    final history = transactions.where((transaction) {
+      if (transaction.isTransfer) {
+        return transaction.fromAccountId == accountId ||
+            transaction.toAccountId == accountId;
+      }
+      return transaction.accountId == accountId;
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    return history.take(25).toList();
   }
 
   Future<void> _openAccountForm(
@@ -585,6 +653,312 @@ class _EmptyAccounts extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _AccountDetailSheet extends StatelessWidget {
+  const _AccountDetailSheet({
+    required this.account,
+    required this.displayCurrencyCode,
+    required this.history,
+    required this.onEdit,
+  });
+
+  final AccountPreview account;
+  final String displayCurrencyCode;
+  final List<TransactionListItem> history;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final shouldShowConvertedBalance =
+        account.currencyCode.toUpperCase() != displayCurrencyCode.toUpperCase();
+
+    return FractionallySizedBox(
+      heightFactor: 0.86,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          20 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: colors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: account.color,
+                  foregroundColor: colors.onPrimary,
+                  child: Text(
+                    _initialsFor(account.name),
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        account.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${account.type} â€¢ ${account.bankName ?? 'Sem banco'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  onPressed: onEdit,
+                  tooltip: 'Editar conta',
+                  icon: const Icon(Icons.edit_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.accentSoft,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Saldo da conta',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: colors.textSecondary),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            CurrencyUtils.formatCents(
+                              account.balanceCents,
+                              currencyCode: account.currencyCode,
+                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(color: colors.primary),
+                          ),
+                          if (shouldShowConvertedBalance) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              'â‰ˆ ${CurrencyUtils.formatCents(
+                                account.consolidatedBalanceCents,
+                                currencyCode: displayCurrencyCode,
+                              )}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: colors.textSecondary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      account.includeInTotalBalance
+                          ? Icons.add_chart_rounded
+                          : Icons.visibility_off_rounded,
+                      color: colors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'HistÃ³rico da conta',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: history.isEmpty
+                  ? const _EmptyAccountHistory()
+                  : ListView.separated(
+                      itemCount: history.length,
+                      separatorBuilder: (_, __) => Divider(
+                        color: colors.border,
+                        height: 1,
+                      ),
+                      itemBuilder: (context, index) {
+                        return _AccountHistoryTile(
+                          account: account,
+                          transaction: history[index],
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _initialsFor(String name) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      return '?';
+    }
+    return trimmedName.characters.take(2).toString().toUpperCase();
+  }
+}
+
+class _EmptyAccountHistory extends StatelessWidget {
+  const _EmptyAccountHistory();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 40,
+              color: colors.textSecondary,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Ainda nÃ£o hÃ¡ lanÃ§amentos nesta conta.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountHistoryTile extends StatelessWidget {
+  const _AccountHistoryTile({
+    required this.account,
+    required this.transaction,
+  });
+
+  final AccountPreview account;
+  final TransactionListItem transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final isIncomingTransfer =
+        transaction.isTransfer && transaction.toAccountId == account.id;
+    final isPositive =
+        transaction.isTransfer ? isIncomingTransfer : transaction.isIncome;
+    final amountCents = isIncomingTransfer
+        ? transaction.toAmountCents ?? transaction.amountCents
+        : transaction.amountCents;
+    final currencyCode = isIncomingTransfer
+        ? transaction.toCurrencyCode ?? transaction.currencyCode
+        : transaction.currencyCode;
+    final detail = transaction.isTransfer
+        ? '${transaction.accountName} â†’ ${transaction.toAccountName ?? 'Conta'}'
+        : '${transaction.categoryName} â€¢ ${transaction.paymentMethodLabel}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 19,
+            backgroundColor: transaction.iconColor.withValues(alpha: 0.13),
+            foregroundColor: transaction.iconColor,
+            child: Icon(transaction.icon, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  transaction.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$detail â€¢ ${_shortDate(transaction.date)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${isPositive ? '+ ' : '- '}${CurrencyUtils.formatCents(
+                  amountCents,
+                  currencyCode: currencyCode,
+                )}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: isPositive ? colors.success : colors.textPrimary,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                transaction.isPaid ? 'Efetivado' : 'Pendente',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: transaction.isPaid
+                          ? colors.textSecondary
+                          : colors.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _shortDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }
 

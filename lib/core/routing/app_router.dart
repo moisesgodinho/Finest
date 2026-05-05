@@ -7,6 +7,8 @@ import '../../features/goals/goals_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/investments/investments_page.dart';
 import '../../features/pet/pet_page.dart';
+import '../../features/quotes/quotes_page.dart';
+import '../../features/reports/reports_page.dart';
 import '../../features/transactions/transactions_page.dart';
 import '../auth/auth_service.dart';
 
@@ -21,6 +23,8 @@ class AppRoutes {
   static const transactions = '/transactions';
   static const investments = '/investments';
   static const pet = '/pet';
+  static const quotes = '/quotes';
+  static const reports = '/reports';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -83,6 +87,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.pet,
         name: 'pet',
         builder: (context, state) => const PetPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.quotes,
+        name: 'quotes',
+        builder: (context, state) => const QuotesPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.reports,
+        name: 'reports',
+        builder: (context, state) => const ReportsPage(),
       ),
     ],
   );

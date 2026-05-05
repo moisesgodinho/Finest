@@ -13,6 +13,7 @@ import '../../data/models/create_account_request.dart';
 import '../../data/models/update_account_request.dart';
 import '../../data/repositories/account_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../data/repositories/transfer_repository.dart';
 
 class AccountsState {
   const AccountsState({
@@ -105,11 +106,13 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
   AccountsViewModel({
     required AccountRepository accountRepository,
     required TransactionRepository transactionRepository,
+    required TransferRepository transferRepository,
     required ExchangeRateService exchangeRateService,
     required String currencyCode,
     required int? userId,
   })  : _accountRepository = accountRepository,
         _transactionRepository = transactionRepository,
+        _transferRepository = transferRepository,
         _exchangeRateService = exchangeRateService,
         _currencyCode = currencyCode,
         _userId = userId,
@@ -120,17 +123,21 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
         )) {
     _watchAccounts();
     _watchTransactions();
+    _watchTransfers();
   }
 
   final AccountRepository _accountRepository;
   final TransactionRepository _transactionRepository;
+  final TransferRepository _transferRepository;
   final ExchangeRateService _exchangeRateService;
   final String _currencyCode;
   final int? _userId;
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
+  StreamSubscription<List<AccountTransfer>>? _transfersSubscription;
   List<AccountPreview> _accounts = [];
   List<FinanceTransaction> _transactions = [];
+  List<AccountTransfer> _transfers = [];
 
   void toggleBalanceVisibility() {
     state = state.copyWith(isBalanceVisible: !state.isBalanceVisible);
@@ -187,6 +194,18 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
+      final effectiveCurrencyCode = currencyCode ?? account.currencyCode;
+      if (effectiveCurrencyCode.toUpperCase() !=
+          account.currencyCode.toUpperCase()) {
+        throw StateError('A moeda da conta nÃ£o pode ser alterada.');
+      }
+      if (_hasLinkedEntries(account.id) &&
+          balanceCents != account.balanceCents) {
+        throw StateError(
+          'Esta conta jÃ¡ possui lanÃ§amentos. Para ajustar o saldo, registre uma receita, despesa ou transferÃªncia.',
+        );
+      }
+
       await _accountRepository.updateAccount(
         UpdateAccountRequest(
           id: account.id,
@@ -196,7 +215,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           bankName: bankName,
           initialBalance: balanceCents,
           currentBalance: balanceCents,
-          currencyCode: currencyCode ?? account.currencyCode,
+          currencyCode: effectiveCurrencyCode,
           emergencyReserveTarget: emergencyReserveTarget,
           includeInTotalBalance:
               includeInTotalBalance ?? account.includeInTotalBalance,
@@ -217,6 +236,12 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
+      if (_hasLinkedEntries(account.id)) {
+        throw StateError(
+          'Esta conta possui lanÃ§amentos ou transferÃªncias vinculados. Remova ou mova esses registros antes de excluir a conta.',
+        );
+      }
+
       await _accountRepository.deleteAccount(
         userId: userId,
         accountId: account.id,
@@ -260,6 +285,26 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
         _transactionRepository.watchTransactions(userId).listen(
       (transactions) {
         _transactions = transactions;
+        _publishState(isLoading: false, clearError: true);
+      },
+      onError: (Object error) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: error.toString(),
+        );
+      },
+    );
+  }
+
+  void _watchTransfers() {
+    final userId = _userId;
+    if (userId == null) {
+      return;
+    }
+
+    _transfersSubscription = _transferRepository.watchTransfers(userId).listen(
+      (transfers) {
+        _transfers = transfers;
         _publishState(isLoading: false, clearError: true);
       },
       onError: (Object error) {
@@ -389,6 +434,17 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     return userId;
   }
 
+  bool _hasLinkedEntries(int accountId) {
+    final hasTransactions =
+        _transactions.any((transaction) => transaction.accountId == accountId);
+    final hasTransfers = _transfers.any(
+      (transfer) =>
+          transfer.fromAccountId == accountId ||
+          transfer.toAccountId == accountId,
+    );
+    return hasTransactions || hasTransfers;
+  }
+
   AccountPreview _mapAccount(Account account) {
     return AccountPreview(
       id: account.id,
@@ -415,6 +471,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
   void dispose() {
     _accountsSubscription?.cancel();
     _transactionsSubscription?.cancel();
+    _transfersSubscription?.cancel();
     super.dispose();
   }
 }
@@ -428,6 +485,7 @@ final accountsViewModelProvider =
   return AccountsViewModel(
     accountRepository: ref.watch(accountRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    transferRepository: ref.watch(transferRepositoryProvider),
     exchangeRateService: ref.watch(exchangeRateServiceProvider),
     currencyCode: ref.watch(currencyControllerProvider),
     userId: userId,
