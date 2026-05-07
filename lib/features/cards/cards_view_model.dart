@@ -30,6 +30,7 @@ class CardsState {
     required this.invoices,
     required this.categories,
     required this.subcategories,
+    required this.firstAvailableMonth,
     this.currencyCode = 'BRL',
     this.isLoading = false,
     this.errorMessage,
@@ -40,6 +41,7 @@ class CardsState {
   final List<CreditCardInvoicePreview> invoices;
   final List<CategoryModel> categories;
   final List<SubcategoryModel> subcategories;
+  final DateTime firstAvailableMonth;
   final String currencyCode;
   final bool isLoading;
   final String? errorMessage;
@@ -98,6 +100,11 @@ class CardsState {
     final keyedMonths = <String, DateTime>{};
     final now = DateTime.now();
     keyedMonths['${now.year}-${now.month}'] = DateTime(now.year, now.month);
+    final firstMonth = card.firstAvailableMonth ?? card.createdAt;
+    if (firstMonth != null) {
+      keyedMonths['${firstMonth.year}-${firstMonth.month}'] =
+          DateTime(firstMonth.year, firstMonth.month);
+    }
 
     for (final invoice
         in invoices.where((invoice) => invoice.cardId == card.id)) {
@@ -142,6 +149,7 @@ class CardsState {
     List<CreditCardInvoicePreview>? invoices,
     List<CategoryModel>? categories,
     List<SubcategoryModel>? subcategories,
+    DateTime? firstAvailableMonth,
     String? currencyCode,
     bool? isLoading,
     String? errorMessage,
@@ -153,6 +161,7 @@ class CardsState {
       invoices: invoices ?? this.invoices,
       categories: categories ?? this.categories,
       subcategories: subcategories ?? this.subcategories,
+      firstAvailableMonth: firstAvailableMonth ?? this.firstAvailableMonth,
       currencyCode: currencyCode ?? this.currencyCode,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
@@ -163,6 +172,21 @@ class CardsState {
 int _safeDay(int year, int month, int day) {
   final lastDay = DateTime(year, month + 1, 0).day;
   return day.clamp(1, lastDay).toInt();
+}
+
+DateTime _monthOnly(DateTime date) => DateTime(date.year, date.month);
+
+bool _isBeforeMonth(DateTime left, DateTime right) {
+  return left.year < right.year ||
+      (left.year == right.year && left.month < right.month);
+}
+
+DateTime _minMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? left : right;
+}
+
+DateTime _minNullableMonth(DateTime? left, DateTime right) {
+  return left == null ? right : _minMonth(left, right);
 }
 
 class CardsViewModel extends StateNotifier<CardsState> {
@@ -188,6 +212,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
             invoices: const [],
             categories: const [],
             subcategories: const [],
+            firstAvailableMonth: _monthOnly(DateTime.now()),
             currencyCode: currencyCode,
             isLoading: true,
           ),
@@ -436,12 +461,14 @@ class CardsViewModel extends StateNotifier<CardsState> {
 
     try {
       final targets = _invoiceTransactionTargetsFor(transaction, scope);
+      _ensureInvoiceTargetsEditable(targets);
       final useInstallmentSuffix = targets.any(
         (target) => _hasInstallmentSuffix(target.description),
       );
+      final requests = <UpdateCreditCardExpenseRequest>[];
 
       for (final target in targets) {
-        await _transactionRepository.updateCreditCardExpense(
+        requests.add(
           UpdateCreditCardExpenseRequest(
             userId: userId,
             transactionId: target.id,
@@ -454,10 +481,17 @@ class CardsViewModel extends StateNotifier<CardsState> {
             amountCents: amountCents,
             categoryId: categoryId,
             subcategoryId: subcategoryId,
-            date: date,
+            date: _shiftDateForSeries(
+              date,
+              selectedInstallment: transaction.installmentNumber,
+              targetInstallment: target.installmentNumber,
+              selectedDate: DateTime(invoice.year, invoice.month),
+              targetDate: _seriesDateForTransaction(target),
+            ),
           ),
         );
       }
+      await _transactionRepository.updateCreditCardExpenses(requests);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -481,12 +515,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
 
     try {
       final targets = _invoiceTransactionTargetsFor(transaction, scope);
-      for (final target in targets) {
-        await _transactionRepository.deleteTransaction(
-          userId: userId,
-          transactionId: target.id,
-        );
-      }
+      _ensureInvoiceTargetsEditable(targets);
+      await _transactionRepository.deleteTransactions(
+        userId: userId,
+        transactionIds: [for (final target in targets) target.id],
+      );
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -515,9 +548,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
               _matchesCreditCardInstallmentSeries(transaction, selectedRaw),
         )
         .where(
-          (transaction) => _matchesInstallmentScope(
+          (transaction) => _matchesSeriesScope(
             targetInstallment: transaction.installmentNumber,
             selectedInstallment: selectedRaw.installmentNumber,
+            targetDate: _seriesDateForTransaction(transaction),
+            selectedDate: _seriesDateForTransaction(selectedRaw),
             scope: scope,
           ),
         )
@@ -525,6 +560,35 @@ class CardsViewModel extends StateNotifier<CardsState> {
       ..sort(_compareInstallmentTransactions);
 
     return matches.isEmpty ? [selectedRaw] : matches;
+  }
+
+  void _ensureInvoiceTargetsEditable(List<FinanceTransaction> targets) {
+    for (final target in targets) {
+      final invoice = _invoiceForTransaction(target);
+      if (invoice?.status == 'paid') {
+        throw StateError(
+          'Uma ou mais faturas desta sÃ©rie jÃ¡ foram pagas. Edite apenas parcelas em faturas abertas.',
+        );
+      }
+    }
+  }
+
+  CreditCardInvoice? _invoiceForTransaction(FinanceTransaction transaction) {
+    final invoiceMonth = transaction.invoiceMonth;
+    final invoiceYear = transaction.invoiceYear;
+    final creditCardId = transaction.creditCardId;
+    if (invoiceMonth == null || invoiceYear == null || creditCardId == null) {
+      return null;
+    }
+
+    for (final invoice in _invoices) {
+      if (invoice.creditCardId == creditCardId &&
+          invoice.month == invoiceMonth &&
+          invoice.year == invoiceYear) {
+        return invoice;
+      }
+    }
+    return null;
   }
 
   FinanceTransaction? _transactionById(int id) {
@@ -554,9 +618,11 @@ class CardsViewModel extends StateNotifier<CardsState> {
             _seriesBaseName(selected.description);
   }
 
-  bool _matchesInstallmentScope({
+  bool _matchesSeriesScope({
     required int? targetInstallment,
     required int? selectedInstallment,
+    required DateTime targetDate,
+    required DateTime selectedDate,
     required TransactionSeriesScope scope,
   }) {
     if (scope == TransactionSeriesScope.all) {
@@ -566,7 +632,18 @@ class CardsViewModel extends StateNotifier<CardsState> {
       return targetInstallment == selectedInstallment;
     }
 
-    return (targetInstallment ?? 0) >= (selectedInstallment ?? 0);
+    if (selectedInstallment == null || targetInstallment == null) {
+      return !targetDate.isBefore(selectedDate);
+    }
+
+    return targetInstallment >= selectedInstallment;
+  }
+
+  DateTime _seriesDateForTransaction(FinanceTransaction transaction) {
+    return DateTime(
+      transaction.invoiceYear ?? transaction.date.year,
+      transaction.invoiceMonth ?? transaction.date.month,
+    );
   }
 
   int _compareInstallmentTransactions(
@@ -587,6 +664,55 @@ class CardsViewModel extends StateNotifier<CardsState> {
       right.invoiceMonth ?? right.date.month,
     );
     return leftInvoice.compareTo(rightInvoice);
+  }
+
+  DateTime _shiftDateForSeries(
+    DateTime date, {
+    required int? selectedInstallment,
+    required int? targetInstallment,
+    DateTime? selectedDate,
+    DateTime? targetDate,
+  }) {
+    if ((selectedInstallment == null || targetInstallment == null) &&
+        selectedDate != null &&
+        targetDate != null) {
+      return _addMonths(date, _monthDelta(selectedDate, targetDate));
+    }
+
+    final selected = selectedInstallment ?? targetInstallment ?? 1;
+    final target = targetInstallment ?? selected;
+    return _addMonths(date, target - selected);
+  }
+
+  int _monthDelta(DateTime selectedDate, DateTime targetDate) {
+    return (targetDate.year - selectedDate.year) * 12 +
+        targetDate.month -
+        selectedDate.month;
+  }
+
+  DateTime _addMonths(DateTime date, int months) {
+    if (months == 0) {
+      return date;
+    }
+
+    final firstDayOfTargetMonth = DateTime(date.year, date.month + months);
+    final lastDayOfTargetMonth = DateTime(
+      firstDayOfTargetMonth.year,
+      firstDayOfTargetMonth.month + 1,
+      0,
+    ).day;
+    final day = date.day.clamp(1, lastDayOfTargetMonth).toInt();
+
+    return DateTime(
+      firstDayOfTargetMonth.year,
+      firstDayOfTargetMonth.month,
+      day,
+      date.hour,
+      date.minute,
+      date.second,
+      date.millisecond,
+      date.microsecond,
+    );
   }
 
   String _seriesDescription(
@@ -622,6 +748,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
         invoices: const [],
         categories: const [],
         subcategories: const [],
+        firstAvailableMonth: _monthOnly(DateTime.now()),
         currencyCode: _currencyCode,
       );
       return;
@@ -681,6 +808,10 @@ class CardsViewModel extends StateNotifier<CardsState> {
 
   Future<void> _publishState() async {
     final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    if (!mounted) {
+      return;
+    }
+
     final accountsById = {for (final account in _accounts) account.id: account};
     final cardsById = {for (final card in _cards) card.id: card};
     final categoriesById = {
@@ -690,21 +821,23 @@ class CardsViewModel extends StateNotifier<CardsState> {
       for (final subcategory in _subcategories) subcategory.id: subcategory,
     };
     final currentInvoiceTotalsByCard = _currentInvoiceTotalsByCard();
+    final cards = [
+      for (final card in _cards)
+        _mapCard(
+          card,
+          accountsById,
+          currentInvoiceCents: currentInvoiceTotalsByCard[card.id],
+          ratesToBrl: ratesToBrl,
+        ),
+    ];
 
     state = state.copyWith(
       accounts: _accounts
           .where((account) => account.type != 'goal')
           .map(_mapAccount)
           .toList(),
-      cards: [
-        for (final card in _cards)
-          _mapCard(
-            card,
-            accountsById,
-            currentInvoiceCents: currentInvoiceTotalsByCard[card.id],
-            ratesToBrl: ratesToBrl,
-          ),
-      ],
+      cards: cards,
+      firstAvailableMonth: _firstAvailableMonthForCards(cards),
       categories: _categories,
       subcategories: _subcategories,
       invoices: _mapInvoicePreviews(
@@ -827,7 +960,59 @@ class CardsViewModel extends StateNotifier<CardsState> {
       isPrimary: card.isPrimary,
       defaultPaymentAccountId: card.defaultPaymentAccountId,
       defaultPaymentAccountName: defaultAccount?.name,
+      createdAt: card.createdAt,
+      firstAvailableMonth: _firstAvailableMonthForCard(card),
     );
+  }
+
+  DateTime _firstAvailableMonthForCards(List<CreditCardPreview> cards) {
+    if (cards.isEmpty) {
+      return _monthOnly(DateTime.now());
+    }
+
+    var firstMonth = cards.first.firstAvailableMonth ??
+        _monthOnly(cards.first.createdAt ?? DateTime.now());
+    for (final card in cards.skip(1)) {
+      firstMonth = _minMonth(
+        firstMonth,
+        card.firstAvailableMonth ??
+            _monthOnly(card.createdAt ?? DateTime.now()),
+      );
+    }
+    return firstMonth;
+  }
+
+  DateTime _firstAvailableMonthForCard(CreditCard card) {
+    DateTime? firstRecordMonth;
+
+    for (final transaction in _transactions) {
+      if (transaction.paymentMethod != 'credit_card' ||
+          transaction.creditCardId != card.id) {
+        continue;
+      }
+
+      firstRecordMonth = _minNullableMonth(
+        firstRecordMonth,
+        DateTime(
+          transaction.invoiceYear ?? transaction.date.year,
+          transaction.invoiceMonth ?? transaction.date.month,
+        ),
+      );
+    }
+
+    for (final invoice in _invoices) {
+      if (invoice.creditCardId != card.id ||
+          (invoice.amount <= 0 && invoice.status != 'paid')) {
+        continue;
+      }
+
+      firstRecordMonth = _minNullableMonth(
+        firstRecordMonth,
+        DateTime(invoice.year, invoice.month),
+      );
+    }
+
+    return firstRecordMonth ?? _monthOnly(card.createdAt);
   }
 
   CreditCardInvoicePreview _mapInvoice(
@@ -1080,6 +1265,7 @@ class CardsViewModel extends StateNotifier<CardsState> {
       entryKind: transaction.expenseKind,
       installmentNumber: transaction.installmentNumber,
       totalInstallments: transaction.totalInstallments,
+      isRecurring: transaction.isRecurring,
     );
   }
 

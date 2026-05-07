@@ -7,6 +7,7 @@ import '../../core/utils/currency_utils.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/subcategory_model.dart';
 import '../../data/models/transaction_name_suggestion.dart';
+import '../../shared/widgets/form_option_selector.dart';
 import '../../shared/widgets/name_prompt_dialog.dart';
 import 'expense_form_view_model.dart';
 import 'transaction_suggestion_strip.dart';
@@ -160,22 +161,21 @@ class _ExpenseFormSheetState extends ConsumerState<ExpenseFormSheet> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Text('Tipo', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+                FormOptionSelector<_ExpenseKind>(
+                  title: 'Tipo',
+                  value: _expenseKind,
+                  options: [
                     for (final kind in _ExpenseKind.values)
-                      ChoiceChip(
-                        selected: _expenseKind == kind,
-                        label: Text(kind.label),
-                        avatar: Icon(kind.icon, size: 18),
-                        onSelected: (_) {
-                          setState(() => _expenseKind = kind);
-                        },
+                      FormOption(
+                        value: kind,
+                        label: kind.label,
+                        icon: kind.icon,
+                        description: kind.description,
                       ),
                   ],
+                  onChanged: (kind) {
+                    setState(() => _expenseKind = kind);
+                  },
                 ),
                 if (_expenseKind == _ExpenseKind.installment) ...[
                   const SizedBox(height: 14),
@@ -658,13 +658,29 @@ class _MissingRequirement extends StatelessWidget {
 }
 
 enum _ExpenseKind {
-  single('single', 'Única', Icons.looks_one_rounded),
-  installment('installment', 'Parcelada', Icons.view_week_rounded),
-  fixedMonthly('fixed_monthly', 'Fixa mensal', Icons.event_repeat_rounded);
+  single(
+    'single',
+    'Única',
+    'Entra apenas uma vez na conta.',
+    Icons.looks_one_rounded,
+  ),
+  installment(
+    'installment',
+    'Parcelada',
+    'Divide a despesa em lançamentos mensais.',
+    Icons.view_week_rounded,
+  ),
+  fixedMonthly(
+    'fixed_monthly',
+    'Fixa mensal',
+    'Repete todo mês como gasto fixo.',
+    Icons.event_repeat_rounded,
+  );
 
-  const _ExpenseKind(this.value, this.label, this.icon);
+  const _ExpenseKind(this.value, this.label, this.description, this.icon);
 
   final String value;
   final String label;
+  final String description;
   final IconData icon;
 }

@@ -21,6 +21,8 @@ class CreditCardPreview {
     this.bankName,
     this.defaultPaymentAccountId,
     this.defaultPaymentAccountName,
+    this.createdAt,
+    this.firstAvailableMonth,
   })  : displayInvoiceCents = displayInvoiceCents ?? invoiceCents,
         displayLimitCents = displayLimitCents ?? limitCents;
 
@@ -43,6 +45,8 @@ class CreditCardPreview {
   final String? bankName;
   final int? defaultPaymentAccountId;
   final String? defaultPaymentAccountName;
+  final DateTime? createdAt;
+  final DateTime? firstAvailableMonth;
 
   int get consolidatedInvoiceCents => displayInvoiceCents;
   int get consolidatedLimitCents => displayLimitCents;

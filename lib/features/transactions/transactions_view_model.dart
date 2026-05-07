@@ -70,6 +70,7 @@ class TransactionListItem {
     this.kindLabel,
     this.installmentNumber,
     this.totalInstallments,
+    this.isRecurring = false,
     this.consolidatedAmountCents,
   });
 
@@ -107,6 +108,7 @@ class TransactionListItem {
   final String? kindLabel;
   final int? installmentNumber;
   final int? totalInstallments;
+  final bool isRecurring;
 
   bool get isIncome => type == TransactionFilters.income;
   bool get isExpense => type == TransactionFilters.expense;
@@ -116,7 +118,8 @@ class TransactionListItem {
       kindCode == 'installment' &&
       (installmentNumber ?? 0) > 0 &&
       (totalInstallments ?? 0) > 1;
-  bool get supportsSeriesScope => isInstallmentSeries;
+  bool get isFixedMonthlySeries => kindCode == 'fixed_monthly' && isRecurring;
+  bool get supportsSeriesScope => isInstallmentSeries || isFixedMonthlySeries;
   int get summaryAmountCents => consolidatedAmountCents ?? amountCents;
 }
 
@@ -402,12 +405,14 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
   StreamSubscription<List<CategoryModel>>? _categoriesSubscription;
   StreamSubscription<List<SubcategoryModel>>? _subcategoriesSubscription;
   StreamSubscription<List<CreditCard>>? _creditCardsSubscription;
+  StreamSubscription<List<CreditCardInvoice>>? _invoicesSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
   StreamSubscription<List<AccountTransfer>>? _transfersSubscription;
   List<Account> _rawAccounts = [];
   List<CategoryModel> _rawCategories = [];
   List<SubcategoryModel> _rawSubcategories = [];
   List<CreditCard> _rawCreditCards = [];
+  List<CreditCardInvoice> _rawInvoices = [];
   List<FinanceTransaction> _rawTransactions = [];
   List<AccountTransfer> _rawTransfers = [];
 
@@ -550,6 +555,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       final useInstallmentSuffix = targets.any(
         (target) => _hasInstallmentSuffix(target.description),
       );
+      final requests = <UpdateTransactionRequest>[];
 
       for (final target in targets) {
         final keepsInstallments = transactionKind == 'installment';
@@ -559,7 +565,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
             ? totalInstallments ?? target.totalInstallments
             : null;
 
-        await _transactionRepository.updateTransaction(
+        requests.add(
           UpdateTransactionRequest(
             userId: userId,
             transactionId: target.id,
@@ -578,6 +584,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
               date,
               selectedInstallment: transaction.installmentNumber,
               targetInstallment: effectiveInstallmentNumber,
+              selectedDate: transaction.monthReference,
+              targetDate: _seriesDateForTransaction(target),
             ),
             dueDate: dueDate == null
                 ? null
@@ -585,6 +593,8 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
                     dueDate,
                     selectedInstallment: transaction.installmentNumber,
                     targetInstallment: effectiveInstallmentNumber,
+                    selectedDate: transaction.monthReference,
+                    targetDate: _seriesDateForTransaction(target),
                   ),
             transactionKind: transactionKind,
             installmentNumber: effectiveInstallmentNumber,
@@ -593,6 +603,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
           ),
         );
       }
+      await _transactionRepository.updateTransactions(requests);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -628,6 +639,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
         toAccountId: toAccountId,
         amountCents: amountCents,
       );
+      final requests = <UpdateTransferRequest>[];
 
       for (final target in targets) {
         final keepsInstallments = transferKind == 'installment';
@@ -637,7 +649,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
             ? totalInstallments ?? target.totalInstallments
             : null;
 
-        await _transferRepository.updateTransfer(
+        requests.add(
           UpdateTransferRequest(
             userId: userId,
             transferId: target.id,
@@ -656,12 +668,16 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
               dueDate,
               selectedInstallment: transfer.installmentNumber,
               targetInstallment: effectiveInstallmentNumber,
+              selectedDate: transfer.date,
+              targetDate: target.date,
             ),
             isPaid: isPaid,
             date: _shiftDateForSeries(
               date,
               selectedInstallment: transfer.installmentNumber,
               targetInstallment: effectiveInstallmentNumber,
+              selectedDate: transfer.date,
+              targetDate: target.date,
             ),
             installmentNumber: effectiveInstallmentNumber,
             totalInstallments: effectiveTotalInstallments,
@@ -669,6 +685,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
           ),
         );
       }
+      await _transferRepository.updateTransfers(requests);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -688,20 +705,17 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     try {
       if (transaction.isTransfer) {
         final targets = _transferTargetsFor(transaction, scope);
-        for (final target in targets) {
-          await _transferRepository.deleteTransfer(
-            userId: userId,
-            transferId: target.id,
-          );
-        }
+        await _transferRepository.deleteTransfers(
+          userId: userId,
+          transferIds: [for (final target in targets) target.id],
+        );
       } else {
         final targets = _transactionTargetsFor(transaction, scope);
-        for (final target in targets) {
-          await _transactionRepository.deleteTransaction(
-            userId: userId,
-            transactionId: target.id,
-          );
-        }
+        _ensureCreditCardTargetsEditable(targets);
+        await _transactionRepository.deleteTransactions(
+          userId: userId,
+          transactionIds: [for (final target in targets) target.id],
+        );
       }
     } catch (error) {
       state = state.copyWith(
@@ -731,9 +745,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
         .where((transaction) =>
             _matchesTransactionSeries(transaction, selectedRaw))
         .where(
-          (transaction) => _matchesInstallmentScope(
+          (transaction) => _matchesSeriesScope(
             targetInstallment: transaction.installmentNumber,
             selectedInstallment: selectedRaw.installmentNumber,
+            targetDate: _seriesDateForTransaction(transaction),
+            selectedDate: _seriesDateForTransaction(selectedRaw),
             scope: scope,
           ),
         )
@@ -741,6 +757,39 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       ..sort(_compareInstallmentTransactions);
 
     return matches.isEmpty ? [selectedRaw] : matches;
+  }
+
+  void _ensureCreditCardTargetsEditable(List<FinanceTransaction> targets) {
+    for (final target in targets) {
+      if (target.paymentMethod != 'credit_card') {
+        continue;
+      }
+
+      final invoice = _invoiceForTransaction(target);
+      if (invoice?.status == 'paid') {
+        throw StateError(
+          'Uma ou mais faturas desta sÃ©rie jÃ¡ foram pagas. Edite apenas parcelas em faturas abertas.',
+        );
+      }
+    }
+  }
+
+  CreditCardInvoice? _invoiceForTransaction(FinanceTransaction transaction) {
+    final invoiceMonth = transaction.invoiceMonth;
+    final invoiceYear = transaction.invoiceYear;
+    final creditCardId = transaction.creditCardId;
+    if (invoiceMonth == null || invoiceYear == null || creditCardId == null) {
+      return null;
+    }
+
+    for (final invoice in _rawInvoices) {
+      if (invoice.creditCardId == creditCardId &&
+          invoice.month == invoiceMonth &&
+          invoice.year == invoiceYear) {
+        return invoice;
+      }
+    }
+    return null;
   }
 
   List<AccountTransfer> _transferTargetsFor(
@@ -761,9 +810,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     final matches = _rawTransfers
         .where((transfer) => _matchesTransferSeries(transfer, selectedRaw))
         .where(
-          (transfer) => _matchesInstallmentScope(
+          (transfer) => _matchesSeriesScope(
             targetInstallment: transfer.installmentNumber,
             selectedInstallment: selectedRaw.installmentNumber,
+            targetDate: transfer.date,
+            selectedDate: selectedRaw.date,
             scope: scope,
           ),
         )
@@ -802,9 +853,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
         _seriesBaseName(candidate.name) == _seriesBaseName(selected.name);
   }
 
-  bool _matchesInstallmentScope({
+  bool _matchesSeriesScope({
     required int? targetInstallment,
     required int? selectedInstallment,
+    required DateTime targetDate,
+    required DateTime selectedDate,
     required TransactionSeriesScope scope,
   }) {
     if (scope == TransactionSeriesScope.all) {
@@ -814,7 +867,20 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       return targetInstallment == selectedInstallment;
     }
 
-    return (targetInstallment ?? 0) >= (selectedInstallment ?? 0);
+    if (selectedInstallment == null || targetInstallment == null) {
+      return !targetDate.isBefore(selectedDate);
+    }
+
+    return targetInstallment >= selectedInstallment;
+  }
+
+  DateTime _seriesDateForTransaction(FinanceTransaction transaction) {
+    if (transaction.paymentMethod == 'credit_card' &&
+        transaction.invoiceMonth != null &&
+        transaction.invoiceYear != null) {
+      return DateTime(transaction.invoiceYear!, transaction.invoiceMonth!);
+    }
+    return transaction.date;
   }
 
   int _compareInstallmentTransactions(
@@ -845,10 +911,24 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     DateTime date, {
     required int? selectedInstallment,
     required int? targetInstallment,
+    DateTime? selectedDate,
+    DateTime? targetDate,
   }) {
+    if ((selectedInstallment == null || targetInstallment == null) &&
+        selectedDate != null &&
+        targetDate != null) {
+      return _addMonths(date, _monthDelta(selectedDate, targetDate));
+    }
+
     final selected = selectedInstallment ?? targetInstallment ?? 1;
     final target = targetInstallment ?? selected;
     return _addMonths(date, target - selected);
+  }
+
+  int _monthDelta(DateTime selectedDate, DateTime targetDate) {
+    return (targetDate.year - selectedDate.year) * 12 +
+        targetDate.month -
+        selectedDate.month;
   }
 
   DateTime _addMonths(DateTime date, int months) {
@@ -943,6 +1023,14 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       onError: _publishError,
     );
 
+    _invoicesSubscription = _creditCardRepository.watchInvoices(userId).listen(
+      (invoices) {
+        _rawInvoices = invoices;
+        _publishState();
+      },
+      onError: _publishError,
+    );
+
     _transactionsSubscription =
         _transactionRepository.watchTransactions(userId).listen(
       (transactions) {
@@ -963,6 +1051,10 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
 
   Future<void> _publishState() async {
     final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    if (!mounted) {
+      return;
+    }
+
     final accounts = _rawAccounts.map(_mapAccount).toList();
     final accountNames = {
       for (final account in _rawAccounts) account.id: account.name,
@@ -1098,6 +1190,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     final creditCard = creditCardMap[transaction.creditCardId];
     final isCreditCard =
         transaction.paymentMethod == TransactionFilters.creditCard;
+    final isAccountYield = transaction.paymentMethod == 'account_yield';
     final monthReference = isCreditCard &&
             transaction.invoiceMonth != null &&
             transaction.invoiceYear != null
@@ -1130,7 +1223,11 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       dueDate: transaction.dueDate,
       type: transaction.type,
       paymentMethod: transaction.paymentMethod,
-      paymentMethodLabel: isCreditCard ? 'Cartão' : 'Conta',
+      paymentMethodLabel: isCreditCard
+          ? 'Cartão'
+          : isAccountYield
+              ? 'Rendimento'
+              : 'Conta',
       isPaid: transaction.isPaid,
       icon: category?.icon ?? Icons.category_rounded,
       iconColor: category?.color ?? AppColors.primary,
@@ -1140,6 +1237,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       kindLabel: _kindLabel(transaction.expenseKind),
       installmentNumber: transaction.installmentNumber,
       totalInstallments: transaction.totalInstallments,
+      isRecurring: transaction.isRecurring,
     );
   }
 
@@ -1179,6 +1277,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
       kindLabel: _kindLabel(transfer.transferKind),
       installmentNumber: transfer.installmentNumber,
       totalInstallments: transfer.totalInstallments,
+      isRecurring: transfer.transferKind == 'fixed_monthly',
     );
   }
 
@@ -1278,6 +1377,7 @@ class TransactionsViewModel extends StateNotifier<TransactionsState> {
     _categoriesSubscription?.cancel();
     _subcategoriesSubscription?.cancel();
     _creditCardsSubscription?.cancel();
+    _invoicesSubscription?.cancel();
     _transactionsSubscription?.cancel();
     _transfersSubscription?.cancel();
     super.dispose();

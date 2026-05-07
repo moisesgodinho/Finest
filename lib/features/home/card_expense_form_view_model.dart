@@ -144,12 +144,16 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
 
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final installments =
-          expenseKind == 'installment' ? totalInstallments ?? 1 : 1;
+      final isInstallment = expenseKind == 'installment';
+      final installments = isInstallment
+          ? totalInstallments ?? 1
+          : expenseKind == 'fixed_monthly'
+              ? 12
+              : 1;
       final installmentAmounts = _installmentAmounts(
         amountCents: amountCents,
         installments: installments,
-        splitTotal: expenseKind == 'installment' && installmentAmountIsTotal,
+        splitTotal: isInstallment && installmentAmountIsTotal,
       );
 
       for (var index = 0; index < installments; index++) {
@@ -162,7 +166,7 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
             categoryId: categoryId,
             subcategoryId: subcategoryId,
             type: 'expense',
-            description: installments > 1
+            description: isInstallment && installments > 1
                 ? '${name.trim()} (${index + 1}/$installments)'
                 : name,
             amountCents: installmentAmounts[index],
@@ -171,8 +175,10 @@ class CardExpenseFormViewModel extends StateNotifier<CardExpenseFormState> {
             invoiceMonth: invoiceDate.month,
             invoiceYear: invoiceDate.year,
             expenseKind: expenseKind,
-            installmentNumber: installments > 1 ? index + 1 : null,
-            totalInstallments: installments > 1 ? installments : null,
+            installmentNumber:
+                isInstallment && installments > 1 ? index + 1 : null,
+            totalInstallments:
+                isInstallment && installments > 1 ? installments : null,
             isRecurring: expenseKind == 'fixed_monthly',
           ),
         );

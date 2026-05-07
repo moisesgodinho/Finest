@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_text_styles.dart';
@@ -9,6 +10,25 @@ class AppTheme {
   static ThemeData get light => _build(AppColors.light);
 
   static ThemeData get dark => _build(AppColors.dark);
+
+  static SystemUiOverlayStyle systemOverlayStyle(AppPalette colors) {
+    final isLight = colors.brightness == Brightness.light;
+
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isLight ? Brightness.dark : Brightness.light,
+      statusBarBrightness: isLight ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: colors.surface,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isLight ? Brightness.dark : Brightness.light,
+    );
+  }
+
+  static SystemUiOverlayStyle systemOverlayStyleFor(BuildContext context) {
+    final colors = Theme.of(context).extension<AppPalette>() ?? AppColors.light;
+    return systemOverlayStyle(colors);
+  }
 
   static ThemeData _build(AppPalette colors) {
     final colorScheme = ColorScheme.fromSeed(
@@ -29,6 +49,26 @@ class AppTheme {
       borderRadius: BorderRadius.circular(18),
       borderSide: BorderSide(color: colors.border),
     );
+    final menuShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: BorderSide(color: colors.border),
+    );
+    final menuTextStyle = AppTextStyles.bodyMedium.copyWith(
+      color: colors.textPrimary,
+      fontWeight: FontWeight.w800,
+    );
+    final floatingMenuStyle = MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(colors.surfaceElevated),
+      shadowColor: WidgetStatePropertyAll(
+        colors.shadow.withValues(alpha: colors.isDark ? 0.72 : 0.18),
+      ),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      elevation: WidgetStatePropertyAll(colors.isDark ? 14 : 10),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(vertical: 8),
+      ),
+      shape: WidgetStatePropertyAll(menuShape),
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -44,6 +84,7 @@ class AppTheme {
         elevation: 0,
         foregroundColor: colors.textPrimary,
         centerTitle: false,
+        systemOverlayStyle: systemOverlayStyle(colors),
       ),
       textTheme: AppTextStyles.textTheme(colors),
       iconTheme: IconThemeData(color: colors.textSecondary),
@@ -124,6 +165,32 @@ class AppTheme {
         contentTextStyle: AppTextStyles.bodyMedium.copyWith(
           color: colors.textSecondary,
         ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colors.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: colors.shadow.withValues(
+          alpha: colors.isDark ? 0.72 : 0.18,
+        ),
+        elevation: colors.isDark ? 14 : 10,
+        shape: menuShape,
+        menuPadding: const EdgeInsets.symmetric(vertical: 8),
+        iconColor: colors.textSecondary,
+        iconSize: 24,
+        textStyle: menuTextStyle,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return menuTextStyle.copyWith(
+              color: colors.textSecondary.withValues(alpha: 0.55),
+            );
+          }
+          return menuTextStyle;
+        }),
+      ),
+      menuTheme: MenuThemeData(style: floatingMenuStyle),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        textStyle: menuTextStyle,
+        menuStyle: floatingMenuStyle,
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surface,

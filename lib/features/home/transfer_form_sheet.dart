@@ -6,14 +6,17 @@ import '../../core/currency/exchange_rate_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../data/models/account_preview.dart';
+import '../../shared/widgets/form_option_selector.dart';
 import 'transfer_form_view_model.dart';
 
 class TransferFormSheet extends ConsumerStatefulWidget {
   const TransferFormSheet({
     super.key,
+    this.initialFromAccountId,
     this.initialToAccountId,
   });
 
+  final int? initialFromAccountId;
   final int? initialToAccountId;
 
   @override
@@ -39,6 +42,7 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
     final now = DateTime.now();
     _dueDate = now;
     _date = now;
+    _selectedFromAccountId = widget.initialFromAccountId;
     _selectedToAccountId = widget.initialToAccountId;
   }
 
@@ -141,22 +145,21 @@ class _TransferFormSheetState extends ConsumerState<TransferFormSheet> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Text('Tipo', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+                FormOptionSelector<_TransferKind>(
+                  title: 'Tipo',
+                  value: _transferKind,
+                  options: [
                     for (final kind in _TransferKind.values)
-                      ChoiceChip(
-                        selected: _transferKind == kind,
-                        label: Text(kind.label),
-                        avatar: Icon(kind.icon, size: 18),
-                        onSelected: (_) {
-                          setState(() => _transferKind = kind);
-                        },
+                      FormOption(
+                        value: kind,
+                        label: kind.label,
+                        icon: kind.icon,
+                        description: kind.description,
                       ),
                   ],
+                  onChanged: (kind) {
+                    setState(() => _transferKind = kind);
+                  },
                 ),
                 if (_transferKind == _TransferKind.installment) ...[
                   const SizedBox(height: 14),
@@ -600,13 +603,29 @@ class _MissingRequirement extends StatelessWidget {
 }
 
 enum _TransferKind {
-  single('single', 'Única', Icons.looks_one_rounded),
-  installment('installment', 'Parcelada', Icons.view_week_rounded),
-  fixedMonthly('fixed_monthly', 'Fixa mensal', Icons.event_repeat_rounded);
+  single(
+    'single',
+    'Única',
+    'Move o valor uma vez entre contas.',
+    Icons.looks_one_rounded,
+  ),
+  installment(
+    'installment',
+    'Parcelada',
+    'Agenda a transferência em parcelas.',
+    Icons.view_week_rounded,
+  ),
+  fixedMonthly(
+    'fixed_monthly',
+    'Fixa mensal',
+    'Repete a transferência todo mês.',
+    Icons.event_repeat_rounded,
+  );
 
-  const _TransferKind(this.value, this.label, this.icon);
+  const _TransferKind(this.value, this.label, this.description, this.icon);
 
   final String value;
   final String label;
+  final String description;
   final IconData icon;
 }

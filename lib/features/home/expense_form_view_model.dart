@@ -122,8 +122,12 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final installments =
-          expenseKind == 'installment' ? totalInstallments ?? 1 : 1;
+      final isInstallment = expenseKind == 'installment';
+      final installments = isInstallment
+          ? totalInstallments ?? 1
+          : expenseKind == 'fixed_monthly'
+              ? 12
+              : 1;
       final baseName = name.trim();
 
       for (var index = 0; index < installments; index++) {
@@ -134,7 +138,7 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
             categoryId: categoryId,
             subcategoryId: subcategoryId,
             type: 'expense',
-            description: installments > 1
+            description: isInstallment && installments > 1
                 ? '$baseName (${index + 1}/$installments)'
                 : baseName,
             amountCents: amountCents,
@@ -142,8 +146,10 @@ class ExpenseFormViewModel extends StateNotifier<ExpenseFormState> {
             dueDate: _addMonths(dueDate, index),
             paymentMethod: 'account',
             expenseKind: expenseKind,
-            installmentNumber: installments > 1 ? index + 1 : null,
-            totalInstallments: installments > 1 ? installments : null,
+            installmentNumber:
+                isInstallment && installments > 1 ? index + 1 : null,
+            totalInstallments:
+                isInstallment && installments > 1 ? installments : null,
             isPaid: index == 0 ? isPaid : false,
             isRecurring: expenseKind == 'fixed_monthly',
           ),

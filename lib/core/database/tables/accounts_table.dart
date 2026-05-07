@@ -17,6 +17,8 @@ class Accounts extends Table {
   TextColumn get currencyCode =>
       text().withLength(min: 3, max: 3).withDefault(const Constant('BRL'))();
   IntColumn get emergencyReserveTarget => integer().nullable()();
+  IntColumn get goalLinkedAccountId => integer().nullable()();
+  DateTimeColumn get goalTargetDate => dateTime().nullable()();
   BoolColumn get includeInTotalBalance =>
       boolean().withDefault(const Constant(true))();
   TextColumn get color => text().withDefault(const Constant('#006B4F'))();

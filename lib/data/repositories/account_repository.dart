@@ -14,10 +14,18 @@ abstract class AccountRepository {
 
   Future<void> updateAccount(UpdateAccountRequest request);
 
+  Future<void> updateIncludeInTotalBalance({
+    required int userId,
+    required int accountId,
+    required bool includeInTotalBalance,
+  });
+
   Future<void> deleteAccount({
     required int userId,
     required int accountId,
   });
+
+  Future<void> reconcileBalances(int userId);
 
   Future<int> totalBalanceCents(int userId);
 }
@@ -51,6 +59,8 @@ class DriftAccountRepository implements AccountRepository {
         currentBalance: Value(request.initialBalance),
         currencyCode: Value(request.currencyCode.toUpperCase()),
         emergencyReserveTarget: Value(request.emergencyReserveTarget),
+        goalLinkedAccountId: Value(request.goalLinkedAccountId),
+        goalTargetDate: Value(request.goalTargetDate),
         includeInTotalBalance: Value(request.includeInTotalBalance),
         color: Value(request.color),
         icon: Value(request.icon),
@@ -73,6 +83,8 @@ class DriftAccountRepository implements AccountRepository {
         currentBalance: Value(request.currentBalance),
         currencyCode: Value(request.currencyCode.toUpperCase()),
         emergencyReserveTarget: Value(request.emergencyReserveTarget),
+        goalLinkedAccountId: Value(request.goalLinkedAccountId),
+        goalTargetDate: Value(request.goalTargetDate),
         includeInTotalBalance: Value(request.includeInTotalBalance),
         color: Value(request.color),
         icon: Value(request.icon),
@@ -82,6 +94,24 @@ class DriftAccountRepository implements AccountRepository {
 
     if (affectedRows == 0) {
       throw StateError('Conta não encontrada para atualização.');
+    }
+  }
+
+  @override
+  Future<void> updateIncludeInTotalBalance({
+    required int userId,
+    required int accountId,
+    required bool includeInTotalBalance,
+  }) async {
+    final affectedRows =
+        await _database.accountsDao.updateIncludeInTotalBalance(
+      id: accountId,
+      userId: userId,
+      includeInTotalBalance: includeInTotalBalance,
+    );
+
+    if (affectedRows == 0) {
+      throw StateError('Conta nao encontrada para atualizacao.');
     }
   }
 
@@ -98,6 +128,72 @@ class DriftAccountRepository implements AccountRepository {
     if (affectedRows == 0) {
       throw StateError('Conta não encontrada para remoção.');
     }
+  }
+
+  @override
+  Future<void> reconcileBalances(int userId) async {
+    await _database.transaction(() async {
+      final accounts = await _database.accountsDao.findByUser(userId);
+      final balances = {
+        for (final account in accounts) account.id: account.initialBalance,
+      };
+
+      final transactions = await _database.transactionsDao.findByUser(userId);
+      for (final transaction in transactions) {
+        if (!transaction.isPaid ||
+            transaction.paymentMethod == 'credit_card' ||
+            !balances.containsKey(transaction.accountId)) {
+          continue;
+        }
+
+        balances[transaction.accountId] = balances[transaction.accountId]! +
+            (transaction.type == 'income'
+                ? transaction.amount
+                : -transaction.amount);
+      }
+
+      final transfers = await _database.transfersDao.findByUser(userId);
+      for (final transfer in transfers) {
+        if (!transfer.isPaid) {
+          continue;
+        }
+        if (balances.containsKey(transfer.fromAccountId)) {
+          balances[transfer.fromAccountId] =
+              balances[transfer.fromAccountId]! - transfer.amount;
+        }
+        if (balances.containsKey(transfer.toAccountId)) {
+          balances[transfer.toAccountId] = balances[transfer.toAccountId]! +
+              (transfer.convertedAmount ?? transfer.amount);
+        }
+      }
+
+      final invoices = await _database.creditCardInvoicesDao.findByUser(userId);
+      for (final invoice in invoices) {
+        final paymentAccountId = invoice.paymentAccountId;
+        if (invoice.status != 'paid' ||
+            paymentAccountId == null ||
+            !balances.containsKey(paymentAccountId)) {
+          continue;
+        }
+
+        balances[paymentAccountId] =
+            balances[paymentAccountId]! - invoice.amount;
+      }
+
+      for (final account in accounts) {
+        final reconciledBalance =
+            balances[account.id] ?? account.initialBalance;
+        if (reconciledBalance == account.currentBalance) {
+          continue;
+        }
+
+        await _database.accountsDao.updateCurrentBalance(
+          id: account.id,
+          userId: userId,
+          currentBalance: reconciledBalance,
+        );
+      }
+    });
   }
 
   @override

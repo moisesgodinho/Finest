@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../data/models/account_preview.dart';
+import '../../data/models/goal_preview.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
+import '../../shared/widgets/balance_card.dart';
 import '../../shared/widgets/section_card.dart';
-import '../home/transfer_form_sheet.dart';
+import '../home/income_form_sheet.dart';
 import 'goals_view_model.dart';
+
+const _createLinkedAccountValue = -1;
 
 class GoalsPage extends ConsumerWidget {
   const GoalsPage({super.key});
@@ -28,20 +34,11 @@ class GoalsPage extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Metas'),
-        actions: [
-          IconButton(
-            tooltip: 'Nova meta',
-            onPressed: () => _openGoalForm(context, ref),
-            icon: const Icon(Icons.add_rounded),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+      appBar: AppBar(title: const Text('Metas')),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Nova meta',
         onPressed: () => _openGoalForm(context, ref),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Meta'),
+        child: const Icon(Icons.add_rounded, size: 34),
       ),
       body: SafeArea(
         bottom: false,
@@ -50,7 +47,7 @@ class GoalsPage extends ConsumerWidget {
             20,
             12,
             20,
-            28 + MediaQuery.viewPaddingOf(context).bottom,
+            100 + MediaQuery.viewPaddingOf(context).bottom,
           ),
           children: [
             if (state.isLoading) ...[
@@ -58,205 +55,70 @@ class GoalsPage extends ConsumerWidget {
               const SizedBox(height: 14),
             ],
             _GoalsHeaderCard(state: state),
-            const SizedBox(height: 14),
-            _GoalMetrics(state: state),
             const SizedBox(height: 18),
-            SectionCard(
-              title: 'Metas pessoais',
-              trailing: TextButton.icon(
-                onPressed: () => _openGoalForm(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Adicionar'),
-              ),
-              child: state.goalAccounts.isEmpty
-                  ? _EmptyPersonalGoals(
-                      onAdd: () => _openGoalForm(context, ref),
-                    )
-                  : Column(
-                      children: [
-                        for (final goal in state.goalAccounts) ...[
-                          _PersonalGoalTile(
-                            goal: goal,
-                            onEdit: () => _openGoalForm(
-                              context,
-                              ref,
-                              goal: goal,
-                            ),
-                            onTransfer: () => _openTransferToGoal(
-                              context,
-                              goal,
-                            ),
-                          ),
-                          if (goal != state.goalAccounts.last)
-                            const SizedBox(height: 12),
-                        ],
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 18),
-            SectionCard(
-              title: 'Reservas',
-              child: _GoalProgressTile(
-                icon: Icons.shield_rounded,
-                color: context.colors.primary,
-                title: 'Reserva de emergência',
-                subtitle: _reserveSubtitle(state),
-                currentLabel: CurrencyUtils.formatCents(
-                  state.emergencyReserveBalanceCents,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Suas metas',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
                 ),
-                targetLabel: state.emergencyReserveTargetCents > 0
-                    ? CurrencyUtils.formatCents(
-                        state.emergencyReserveTargetCents,
-                      )
-                    : 'A calcular',
-                progress: state.emergencyReserveProgress,
-                statusLabel: _reserveStatus(state),
-                footer: state.emergencyReserveTargetCents > 0
-                    ? state.emergencyReserveRemainingCents == 0
-                        ? 'Meta alcançada'
-                        : 'Faltam ${CurrencyUtils.formatCents(state.emergencyReserveRemainingCents)}'
-                    : 'Registre despesas para gerar uma sugestão',
-              ),
+                TextButton.icon(
+                  onPressed: () => _openGoalForm(context, ref),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Adicionar'),
+                ),
+              ],
             ),
-            const SizedBox(height: 18),
-            SectionCard(
-              title: 'Objetivos do mês',
-              child: Column(
-                children: [
-                  _GoalProgressTile(
-                    icon: Icons.account_balance_wallet_rounded,
-                    color: context.colors.info,
-                    title: 'Orçamento mensal',
-                    subtitle: state.plannedExpenseCents > 0
-                        ? 'Gastos dentro do limite planejado'
-                        : 'Planejamento ainda não criado',
-                    currentLabel: CurrencyUtils.formatCents(
-                      state.currentExpenseCents,
-                    ),
-                    targetLabel: state.plannedExpenseCents > 0
-                        ? CurrencyUtils.formatCents(state.plannedExpenseCents)
-                        : 'Sem limite',
-                    progress: state.budgetUsageProgress,
-                    statusLabel: _budgetStatus(state),
-                    footer: _budgetFooter(state),
+            const SizedBox(height: 10),
+            if (state.goalAccounts.isEmpty)
+              _EmptyPersonalGoals(
+                onAdd: () => _openGoalForm(context, ref),
+              )
+            else
+              for (final goal in state.goalAccounts) ...[
+                _PersonalGoalTile(
+                  goal: goal,
+                  linkedAccount: state.linkedAccountFor(goal),
+                  onOpen: () => context.pushNamed(
+                    'goalDetails',
+                    pathParameters: {'goalId': goal.id.toString()},
                   ),
-                  const SizedBox(height: 14),
-                  _GoalProgressTile(
-                    icon: Icons.trending_up_rounded,
-                    color: context.colors.success,
-                    title: 'Taxa de poupança',
-                    subtitle: 'Guardar pelo menos 10% da renda do mês',
-                    currentLabel: CurrencyUtils.formatCents(
-                      state.monthlySavingsCents,
-                    ),
-                    targetLabel: state.monthlySavingsTargetCents > 0
-                        ? CurrencyUtils.formatCents(
-                            state.monthlySavingsTargetCents,
-                          )
-                        : 'Sem receita',
-                    progress: state.monthlySavingsProgress,
-                    statusLabel: _savingsStatus(state),
-                    footer:
-                        '${(state.savingsRate * 100).clamp(-999, 999).round()}% da renda atual',
+                  onEdit: () => _openGoalForm(
+                    context,
+                    ref,
+                    goal: goal,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            SectionCard(
-              title: 'Referências',
-              child: Column(
-                children: [
-                  _ReferenceRow(
-                    icon: Icons.payments_rounded,
-                    label: 'Receitas do mês',
-                    value: CurrencyUtils.formatCents(state.currentIncomeCents),
-                    color: context.colors.success,
+                  onAddIncome: () => _openIncomeForGoal(
+                    context,
+                    goal,
+                    destinationAccountId: state.linkedAccountFor(goal)?.id,
                   ),
-                  _ReferenceRow(
-                    icon: Icons.receipt_long_rounded,
-                    label: 'Despesas do mês',
-                    value: CurrencyUtils.formatCents(state.currentExpenseCents),
-                    color: context.colors.danger,
+                  onDelete: () => _confirmDeleteGoal(
+                    context,
+                    ref,
+                    goal,
                   ),
-                  _ReferenceRow(
-                    icon: Icons.calculate_rounded,
-                    label: 'Média mensal recente',
-                    value: CurrencyUtils.formatCents(
-                      state.monthlyExpenseAverageCents,
-                    ),
-                    color: context.colors.primary,
-                  ),
-                ],
-              ),
-            ),
+                ),
+                if (goal != state.goalAccounts.last) const SizedBox(height: 12),
+              ],
           ],
         ),
       ),
     );
-  }
-
-  String _reserveSubtitle(GoalsState state) {
-    final account = state.emergencyReserveAccount;
-    if (account != null) {
-      return account.name;
-    }
-    if (state.emergencyReserveTargetCents > 0) {
-      return 'Meta sugerida por média de gastos';
-    }
-    return 'Aguardando histórico financeiro';
-  }
-
-  String _reserveStatus(GoalsState state) {
-    if (state.emergencyReserveTargetCents <= 0) {
-      return 'A calcular';
-    }
-    if (state.emergencyReserveRemainingCents == 0) {
-      return 'Completa';
-    }
-    if (state.emergencyReserveAccount == null) {
-      return 'Sugerida';
-    }
-    return 'Em construção';
-  }
-
-  String _budgetStatus(GoalsState state) {
-    if (state.plannedExpenseCents <= 0) {
-      return 'Sem plano';
-    }
-    return state.availableBudgetCents >= 0 ? 'Dentro' : 'Acima';
-  }
-
-  String _budgetFooter(GoalsState state) {
-    if (state.plannedExpenseCents <= 0) {
-      return 'Crie um planejamento mensal para ativar esta meta';
-    }
-    if (state.availableBudgetCents >= 0) {
-      return 'Disponível: ${CurrencyUtils.formatCents(state.availableBudgetCents)}';
-    }
-    return 'Estouro: ${CurrencyUtils.formatCents(-state.availableBudgetCents)}';
-  }
-
-  String _savingsStatus(GoalsState state) {
-    if (state.monthlySavingsTargetCents <= 0) {
-      return 'Sem receita';
-    }
-    if (state.monthlySavingsCents >= state.monthlySavingsTargetCents) {
-      return 'Batida';
-    }
-    if (state.monthlySavingsCents < 0) {
-      return 'Abaixo';
-    }
-    return 'Em evolução';
   }
 }
 
 Future<void> _openGoalForm(
   BuildContext context,
   WidgetRef ref, {
-  AccountPreview? goal,
+  GoalPreview? goal,
 }) async {
   final viewModel = ref.read(goalsViewModelProvider.notifier);
+  final state = ref.read(goalsViewModelProvider);
   final messenger = ScaffoldMessenger.of(context);
 
   final saved = await showModalBottomSheet<bool>(
@@ -270,17 +132,24 @@ Future<void> _openGoalForm(
     builder: (context) {
       return _GoalFormSheet(
         goal: goal,
+        linkedAccounts: state.linkedAccountOptions,
+        progressBalanceCents:
+            goal == null ? 0 : state.goalProgressBalanceCents(goal),
         onSubmit: ({
           required String name,
           required int targetCents,
-          required int initialBalanceCents,
+          required DateTime targetDate,
+          required int? linkedAccountId,
+          required GoalLinkedAccountDraft? linkedAccountDraft,
           required bool includeInTotalBalance,
         }) async {
           if (goal == null) {
             await viewModel.createGoal(
               name: name,
               targetCents: targetCents,
-              initialBalanceCents: initialBalanceCents,
+              targetDate: targetDate,
+              linkedAccountId: linkedAccountId,
+              linkedAccountDraft: linkedAccountDraft,
               includeInTotalBalance: includeInTotalBalance,
             );
           } else {
@@ -288,6 +157,9 @@ Future<void> _openGoalForm(
               goal: goal,
               name: name,
               targetCents: targetCents,
+              targetDate: targetDate,
+              linkedAccountId: linkedAccountId,
+              linkedAccountDraft: linkedAccountDraft,
               includeInTotalBalance: includeInTotalBalance,
             );
           }
@@ -305,10 +177,19 @@ Future<void> _openGoalForm(
   }
 }
 
-Future<void> _openTransferToGoal(
+Future<void> _openIncomeForGoal(
   BuildContext context,
-  AccountPreview goal,
-) async {
+  GoalPreview goal, {
+  int? destinationAccountId,
+}) async {
+  if (destinationAccountId == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Vincule uma conta para adicionar receita.')),
+    );
+    return;
+  }
+
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -317,12 +198,573 @@ Future<void> _openTransferToGoal(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
-    builder: (context) => TransferFormSheet(initialToAccountId: goal.id),
+    builder: (context) => IncomeFormSheet(
+      initialAccountId: destinationAccountId,
+      lockAccount: true,
+      title: 'Receita para ${goal.name}',
+    ),
   );
 
   if (saved == true && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Transferência registrada.')),
+      const SnackBar(content: Text('Receita adicionada na meta.')),
+    );
+    return;
+  }
+}
+
+Future<void> _confirmDeleteGoal(
+  BuildContext context,
+  WidgetRef ref,
+  GoalPreview goal,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Excluir meta?'),
+      content: Text(
+        'A meta "${goal.name}" sera removida. A conta vinculada e o saldo dela serao mantidos.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Excluir'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true) {
+    return;
+  }
+
+  await ref.read(goalsViewModelProvider.notifier).deleteGoal(goal);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Meta excluida.')),
+    );
+  }
+}
+
+class GoalDetailPage extends ConsumerWidget {
+  const GoalDetailPage({
+    required this.goalId,
+    super.key,
+  });
+
+  final int goalId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(goalsViewModelProvider);
+    final goal = state.goalById(goalId);
+    final linkedAccount = goal == null ? null : state.linkedAccountFor(goal);
+    final series = goal == null
+        ? const <GoalBalancePoint>[]
+        : state.balanceSeriesFor(goal);
+
+    ref.listen(
+      goalsViewModelProvider.select((state) => state.errorMessage),
+      (previous, next) {
+        if (next == null || next == previous) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next)),
+        );
+      },
+    );
+
+    if (goal == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Meta')),
+        body: SafeArea(
+          child: Center(
+            child: state.isLoading
+                ? const CircularProgressIndicator()
+                : const Text('Meta nao encontrada.'),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text(goal.name)),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Adicionar receita',
+        onPressed: () => _openIncomeForGoal(
+          context,
+          goal,
+          destinationAccountId: linkedAccount?.id,
+        ),
+        child: const Icon(Icons.add_rounded, size: 34),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            100 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
+          children: [
+            if (state.isLoading) ...[
+              const LinearProgressIndicator(minHeight: 3),
+              const SizedBox(height: 14),
+            ],
+            _GoalDetailHeaderCard(
+              goal: goal,
+              linkedAccount: linkedAccount,
+              balanceCents: state.goalProgressBalanceCents(goal),
+            ),
+            const SizedBox(height: 18),
+            SectionCard(
+              title: 'Evolucao do saldo',
+              child: _GoalEvolutionChart(
+                goal: goal,
+                linkedAccount: linkedAccount,
+                series: series,
+              ),
+            ),
+            const SizedBox(height: 18),
+            SectionCard(
+              title: 'Detalhes',
+              child: Column(
+                children: [
+                  _GoalDetailRow(
+                    label: 'Conta vinculada',
+                    value: linkedAccount?.name ?? 'Nao definida',
+                  ),
+                  _GoalDetailRow(
+                    label: 'Meta',
+                    value: CurrencyUtils.formatCents(
+                      goal.targetAmountCents,
+                      currencyCode: linkedAccount?.currencyCode ?? 'BRL',
+                    ),
+                  ),
+                  _GoalDetailRow(
+                    label: 'Prazo',
+                    value: goal.targetDate == null
+                        ? 'Sem data'
+                        : _formatDate(goal.targetDate!),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GoalDetailHeaderCard extends StatelessWidget {
+  const _GoalDetailHeaderCard({
+    required this.goal,
+    required this.linkedAccount,
+    required this.balanceCents,
+  });
+
+  final GoalPreview goal;
+  final AccountPreview? linkedAccount;
+  final int balanceCents;
+
+  @override
+  Widget build(BuildContext context) {
+    final targetCents = goal.targetAmountCents;
+    final remainingCents =
+        (targetCents - balanceCents).clamp(0, targetCents).toInt();
+    final progress = _goalProgress(balanceCents, targetCents);
+    final progressPercent = (progress * 100).round();
+
+    return BalanceCard(
+      title: goal.name,
+      value: CurrencyUtils.formatCents(
+        balanceCents,
+        currencyCode: linkedAccount?.currencyCode ?? 'BRL',
+      ),
+      subtitle: targetCents > 0
+          ? '$progressPercent% concluido - faltam ${CurrencyUtils.formatCents(
+              remainingCents,
+              currencyCode: linkedAccount?.currencyCode ?? 'BRL',
+            )}'
+          : 'Meta sem valor definido',
+    );
+  }
+}
+
+class _GoalEvolutionChart extends StatelessWidget {
+  const _GoalEvolutionChart({
+    required this.goal,
+    required this.linkedAccount,
+    required this.series,
+  });
+
+  final GoalPreview goal;
+  final AccountPreview? linkedAccount;
+  final List<GoalBalancePoint> series;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final currencyCode = linkedAccount?.currencyCode ?? 'BRL';
+
+    if (series.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          children: [
+            CircleAvatar(
+              backgroundColor: colors.primary.withValues(alpha: 0.10),
+              foregroundColor: colors.primary,
+              child: const Icon(Icons.show_chart_rounded),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Sem historico suficiente para montar o grafico.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final first = series.first;
+    final last = series.last;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 220,
+          width: double.infinity,
+          child: CustomPaint(
+            painter: _GoalEvolutionChartPainter(
+              points: series,
+              lineColor: goal.color,
+              gridColor: colors.border,
+              labelColor: colors.textSecondary,
+              currencyCode: currencyCode,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _GoalSmallMetric(
+                label: _shortMonth(first.month),
+                value: CurrencyUtils.formatCents(
+                  first.balanceCents,
+                  currencyCode: currencyCode,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _GoalSmallMetric(
+                label: _shortMonth(last.month),
+                value: CurrencyUtils.formatCents(
+                  last.balanceCents,
+                  currencyCode: currencyCode,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _GoalEvolutionChartPainter extends CustomPainter {
+  const _GoalEvolutionChartPainter({
+    required this.points,
+    required this.lineColor,
+    required this.gridColor,
+    required this.labelColor,
+    required this.currencyCode,
+  });
+
+  final List<GoalBalancePoint> points;
+  final Color lineColor;
+  final Color gridColor;
+  final Color labelColor;
+  final String currencyCode;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) {
+      return;
+    }
+
+    const leftPadding = 8.0;
+    const rightPadding = 8.0;
+    const topPadding = 18.0;
+    const bottomPadding = 28.0;
+    final chartWidth = size.width - leftPadding - rightPadding;
+    final chartHeight = size.height - topPadding - bottomPadding;
+    final chartTop = topPadding;
+    final chartBottom = topPadding + chartHeight;
+
+    var minValue = points.first.balanceCents;
+    var maxValue = points.first.balanceCents;
+    for (final point in points) {
+      if (point.balanceCents < minValue) {
+        minValue = point.balanceCents;
+      }
+      if (point.balanceCents > maxValue) {
+        maxValue = point.balanceCents;
+      }
+    }
+
+    final target = points.isNotEmpty ? points.last.balanceCents : 0;
+    if (target < minValue) {
+      minValue = target;
+    }
+    if (target > maxValue) {
+      maxValue = target;
+    }
+
+    final span = (maxValue - minValue).abs();
+    final safeSpan = span == 0 ? 1 : span;
+
+    final gridPaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.70)
+      ..strokeWidth = 1;
+    for (var index = 0; index < 4; index++) {
+      final y = chartTop + (chartHeight / 3) * index;
+      canvas.drawLine(
+        Offset(leftPadding, y),
+        Offset(size.width - rightPadding, y),
+        gridPaint,
+      );
+    }
+
+    Offset pointOffset(int index, GoalBalancePoint point) {
+      final x = points.length == 1
+          ? leftPadding + chartWidth
+          : leftPadding + (chartWidth / (points.length - 1)) * index;
+      final normalized = (point.balanceCents - minValue) / safeSpan;
+      final y = chartBottom - (chartHeight * normalized);
+      return Offset(x, y);
+    }
+
+    final linePath = Path();
+    final fillPath = Path();
+    for (var index = 0; index < points.length; index++) {
+      final offset = pointOffset(index, points[index]);
+      if (index == 0) {
+        linePath.moveTo(offset.dx, offset.dy);
+        fillPath.moveTo(offset.dx, chartBottom);
+        fillPath.lineTo(offset.dx, offset.dy);
+      } else {
+        linePath.lineTo(offset.dx, offset.dy);
+        fillPath.lineTo(offset.dx, offset.dy);
+      }
+    }
+    fillPath.lineTo(
+        pointOffset(points.length - 1, points.last).dx, chartBottom);
+    fillPath.close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          lineColor.withValues(alpha: 0.24),
+          lineColor.withValues(alpha: 0.03),
+        ],
+      ).createShader(Rect.fromLTWH(0, chartTop, size.width, chartHeight));
+    canvas.drawPath(fillPath, fillPaint);
+
+    final linePaint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(linePath, linePaint);
+
+    final dotPaint = Paint()..color = lineColor;
+    final latestOffset = pointOffset(points.length - 1, points.last);
+    canvas.drawCircle(latestOffset, 5, dotPaint);
+    canvas.drawCircle(
+      latestOffset,
+      8,
+      Paint()..color = lineColor.withValues(alpha: 0.16),
+    );
+
+    _drawLabel(
+      canvas,
+      Offset(leftPadding, size.height - 20),
+      _shortMonth(points.first.month),
+      labelColor,
+      TextAlign.left,
+    );
+    _drawLabel(
+      canvas,
+      Offset(size.width - rightPadding, size.height - 20),
+      _shortMonth(points.last.month),
+      labelColor,
+      TextAlign.right,
+    );
+  }
+
+  void _drawLabel(
+    Canvas canvas,
+    Offset anchor,
+    String text,
+    Color color,
+    TextAlign align,
+  ) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textAlign: align,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: 120);
+    final dx =
+        align == TextAlign.right ? anchor.dx - textPainter.width : anchor.dx;
+    textPainter.paint(canvas, Offset(dx, anchor.dy));
+  }
+
+  @override
+  bool shouldRepaint(covariant _GoalEvolutionChartPainter oldDelegate) {
+    return oldDelegate.points != points ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.labelColor != labelColor ||
+        oldDelegate.currencyCode != currencyCode;
+  }
+}
+
+class _GoalDetailRow extends StatelessWidget {
+  const _GoalDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoalSmallMetric extends StatelessWidget {
+  const _GoalSmallMetric({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.accentSoft,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GoalsHeaderCard extends StatelessWidget {
+  const _GoalsHeaderCard({required this.state});
+
+  final GoalsState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = state.overallProgress.clamp(0.0, 1.0).toDouble();
+    final progressPercent = (progress * 100).round();
+    final totalTargetCents = state.goalTargetCents;
+    final remainingCents = (totalTargetCents - state.goalBalanceCents)
+        .clamp(0, totalTargetCents)
+        .toInt();
+
+    return BalanceCard(
+      title: 'Metas financeiras',
+      value: CurrencyUtils.formatCents(state.goalBalanceCents),
+      subtitle: totalTargetCents > 0
+          ? '$progressPercent% concluido - faltam ${CurrencyUtils.formatCents(remainingCents)}'
+          : 'Crie sua primeira meta com conta vinculada',
     );
   }
 }
@@ -348,7 +790,7 @@ class _EmptyPersonalGoals extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Crie metas para separar dinheiro por objetivo.',
+            'Crie metas com valor, prazo e uma conta vinculada.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
@@ -367,162 +809,257 @@ class _EmptyPersonalGoals extends StatelessWidget {
 class _PersonalGoalTile extends StatelessWidget {
   const _PersonalGoalTile({
     required this.goal,
+    required this.linkedAccount,
+    required this.onOpen,
     required this.onEdit,
-    required this.onTransfer,
+    required this.onAddIncome,
+    required this.onDelete,
   });
 
-  final AccountPreview goal;
+  final GoalPreview goal;
+  final AccountPreview? linkedAccount;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
-  final VoidCallback onTransfer;
+  final VoidCallback onAddIncome;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final targetCents = goal.emergencyReserveTargetCents ?? 0;
-    final progress = targetCents <= 0
-        ? 0.0
-        : (goal.balanceCents / targetCents).clamp(0.0, 1.0).toDouble();
+    final baseColor = goal.color;
+    final gradientStart = _shiftColor(baseColor, lightnessDelta: 0.10);
+    final gradientEnd = _shiftColor(baseColor, lightnessDelta: -0.12);
+    final currencyCode = linkedAccount?.currencyCode ?? 'BRL';
+    final targetCents = goal.targetAmountCents;
+    final targetDate = goal.targetDate;
+    final currentBalanceCents = linkedAccount?.balanceCents ?? 0;
+    final progress = _goalProgress(currentBalanceCents, targetCents);
+    final progressPercent = (progress * 100).round();
     final remainingCents =
-        (targetCents - goal.balanceCents).clamp(0, targetCents).toInt();
+        (targetCents - currentBalanceCents).clamp(0, targetCents).toInt();
+    final monthlyContributionCents = _monthlyContributionEstimate(
+      remainingCents: remainingCents,
+      targetDate: targetDate,
+    );
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: goal.color.withValues(alpha: 0.13),
-                foregroundColor: goal.color,
-                child: const Icon(Icons.flag_rounded),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [gradientStart, gradientEnd],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: baseColor.withValues(alpha: colors.isDark ? 0.28 : 0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      goal.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.white.withValues(alpha: 0.18),
+                    foregroundColor: Colors.white,
+                    child: Text(
+                      _initialsFor(goal.name),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      goal.includeInTotalBalance
-                          ? 'Entra no saldo total'
-                          : 'Fora do saldo total',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colors.textSecondary,
-                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          goal.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          linkedAccount == null
+                              ? 'Conta vinculada não definida'
+                              : 'Vinculada a ${linkedAccount!.name}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                  AppPopupMenuButton<_GoalAction>(
+                    icon: const Icon(Icons.more_vert_rounded,
+                        color: Colors.white),
+                    tooltip: 'Opções',
+                    onSelected: (action) {
+                      switch (action) {
+                        case _GoalAction.addIncome:
+                          onAddIncome();
+                          break;
+                        case _GoalAction.edit:
+                          onEdit();
+                          break;
+                        case _GoalAction.delete:
+                          onDelete();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: _GoalAction.addIncome,
+                        child: AppPopupMenuItem(
+                          icon: Icons.add_circle_outline_rounded,
+                          label: 'Adicionar receita',
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _GoalAction.edit,
+                        child: AppPopupMenuItem(
+                          icon: Icons.edit_rounded,
+                          label: 'Editar meta',
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: _GoalAction.delete,
+                        child: AppPopupMenuItem(
+                          icon: Icons.delete_outline_rounded,
+                          label: 'Excluir meta',
+                          isDestructive: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _GoalCardMetric(
+                      label: 'Saldo',
+                      value: CurrencyUtils.formatCents(
+                        currentBalanceCents,
+                        currencyCode: currencyCode,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _GoalCardMetric(
+                      label: 'Meta',
+                      value: targetCents > 0
+                          ? CurrencyUtils.formatCents(
+                              targetCents,
+                              currencyCode: currencyCode,
+                            )
+                          : 'Sem valor',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _GoalCardMetric(
+                      label: 'Prazo',
+                      value: targetDate == null
+                          ? 'Sem data'
+                          : _formatDate(targetDate),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _GoalCardMetric(
+                      label: 'Aporte/mês',
+                      value: CurrencyUtils.formatCents(
+                        monthlyContributionCents,
+                        currencyCode: currencyCode,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 9,
+                  backgroundColor: Colors.white.withValues(alpha: 0.18),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
-              PopupMenuButton<_GoalAction>(
-                tooltip: 'Opções',
-                onSelected: (action) {
-                  switch (action) {
-                    case _GoalAction.transfer:
-                      onTransfer();
-                      break;
-                    case _GoalAction.edit:
-                      onEdit();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _GoalAction.transfer,
-                    child: Text('Transferir para meta'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      remainingCents == 0
+                          ? 'Meta alcançada'
+                          : '$progressPercent% concluído, faltam ${CurrencyUtils.formatCents(remainingCents)}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
                   ),
-                  PopupMenuItem(
-                    value: _GoalAction.edit,
-                    child: Text('Editar meta'),
+                  TextButton.icon(
+                    onPressed: onAddIncome,
+                    style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Receita'),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _GoalValueBlock(
-                  label: 'Guardado',
-                  value: CurrencyUtils.formatCents(goal.balanceCents),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _GoalValueBlock(
-                  label: 'Meta',
-                  value: targetCents > 0
-                      ? CurrencyUtils.formatCents(targetCents)
-                      : 'Sem valor',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 9,
-              backgroundColor: colors.border,
-              valueColor: AlwaysStoppedAnimation<Color>(goal.color),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  targetCents > 0
-                      ? remainingCents == 0
-                          ? 'Meta alcançada'
-                          : 'Faltam ${CurrencyUtils.formatCents(remainingCents)}'
-                      : 'Defina um valor alvo',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onTransfer,
-                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                label: const Text('Transferir'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-enum _GoalAction { transfer, edit }
+enum _GoalAction { addIncome, edit, delete }
 
 class _GoalFormSheet extends StatefulWidget {
   const _GoalFormSheet({
     required this.goal,
+    required this.linkedAccounts,
+    required this.progressBalanceCents,
     required this.onSubmit,
   });
 
-  final AccountPreview? goal;
+  final GoalPreview? goal;
+  final List<AccountPreview> linkedAccounts;
+  final int progressBalanceCents;
   final Future<void> Function({
     required String name,
     required int targetCents,
-    required int initialBalanceCents,
+    required DateTime targetDate,
+    required int? linkedAccountId,
+    required GoalLinkedAccountDraft? linkedAccountDraft,
     required bool includeInTotalBalance,
   }) onSubmit;
 
@@ -534,33 +1071,71 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _targetController;
-  late final TextEditingController _initialBalanceController;
+  late final TextEditingController _newAccountNameController;
+  late final TextEditingController _newAccountBankController;
+  late final TextEditingController _newAccountInitialBalanceController;
+  late DateTime _targetDate;
+  late int _selectedLinkedAccountValue;
   late bool _includeInTotalBalance;
   bool _isSubmitting = false;
 
   bool get _isEditing => widget.goal != null;
+  bool get _shouldCreateLinkedAccount =>
+      _selectedLinkedAccountValue == _createLinkedAccountValue;
+  AccountPreview? get _selectedLinkedAccount {
+    for (final account in widget.linkedAccounts) {
+      if (account.id == _selectedLinkedAccountValue) {
+        return account;
+      }
+    }
+    return null;
+  }
+
+  int get _currentLinkedBalanceCents {
+    if (_shouldCreateLinkedAccount) {
+      return CurrencyUtils.parseToCents(
+          _newAccountInitialBalanceController.text);
+    }
+
+    return _selectedLinkedAccount?.balanceCents ?? widget.progressBalanceCents;
+  }
 
   @override
   void initState() {
     super.initState();
     final goal = widget.goal;
+    final fallbackTargetDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month + 12,
+    );
+    final linkedId = goal?.linkedAccountId;
+    final hasLinkedAccount = linkedId != null &&
+        widget.linkedAccounts.any((account) => account.id == linkedId);
+
     _nameController = TextEditingController(text: goal?.name ?? '');
     _targetController = TextEditingController(
-      text: goal == null
-          ? ''
-          : _formatCentsForInput(goal.emergencyReserveTargetCents ?? 0),
+      text: goal == null ? '' : _formatCentsForInput(goal.targetAmountCents),
     );
-    _initialBalanceController = TextEditingController(
-      text: goal == null ? '' : _formatCentsForInput(goal.balanceCents),
-    );
-    _includeInTotalBalance = goal?.includeInTotalBalance ?? false;
+    _newAccountNameController = TextEditingController();
+    _newAccountBankController = TextEditingController();
+    _newAccountInitialBalanceController = TextEditingController();
+    _targetDate = goal?.targetDate ?? fallbackTargetDate;
+    _selectedLinkedAccountValue = hasLinkedAccount
+        ? linkedId
+        : widget.linkedAccounts.isEmpty
+            ? _createLinkedAccountValue
+            : widget.linkedAccounts.first.id;
+    _includeInTotalBalance =
+        _selectedLinkedAccount?.includeInTotalBalance ?? false;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _targetController.dispose();
-    _initialBalanceController.dispose();
+    _newAccountNameController.dispose();
+    _newAccountBankController.dispose();
+    _newAccountInitialBalanceController.dispose();
     super.dispose();
   }
 
@@ -612,6 +1187,77 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                 },
               ),
               const SizedBox(height: 14),
+              DropdownButtonFormField<int>(
+                initialValue: _selectedLinkedAccountValue,
+                decoration: const InputDecoration(
+                  labelText: 'Conta vinculada',
+                  prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                ),
+                items: [
+                  for (final account in widget.linkedAccounts)
+                    DropdownMenuItem(
+                      value: account.id,
+                      child: Text(account.name),
+                    ),
+                  const DropdownMenuItem(
+                    value: _createLinkedAccountValue,
+                    child: Text('Criar nova conta'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() {
+                    _selectedLinkedAccountValue = value;
+                    _includeInTotalBalance =
+                        _selectedLinkedAccount?.includeInTotalBalance ?? false;
+                  });
+                },
+              ),
+              if (_shouldCreateLinkedAccount) ...[
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _newAccountNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome da nova conta',
+                    hintText: 'Ex: Conta da meta',
+                    prefixIcon: Icon(Icons.account_balance_rounded),
+                  ),
+                  validator: (value) {
+                    if (!_shouldCreateLinkedAccount) {
+                      return null;
+                    }
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Informe o nome da conta.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _newAccountBankController,
+                  decoration: const InputDecoration(
+                    labelText: 'Banco ou descrição',
+                    prefixIcon: Icon(Icons.business_rounded),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _newAccountInitialBalanceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Saldo inicial da conta',
+                    hintText: 'Ex: 0,00',
+                    prefixIcon: Icon(Icons.savings_rounded),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  validator: _validateOptionalAmount,
+                ),
+              ],
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _targetController,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -624,21 +1270,20 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                 ),
                 validator: _validatePositiveAmount,
               ),
-              if (!_isEditing) ...[
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _initialBalanceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
+              const SizedBox(height: 14),
+              _LinkedBalancePreview(amountCents: _currentLinkedBalanceCents),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: _pickTargetDate,
+                borderRadius: BorderRadius.circular(16),
+                child: InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Saldo inicial',
-                    hintText: 'Ex: 1000,00',
-                    prefixIcon: Icon(Icons.savings_rounded),
+                    labelText: 'Pretende alcançar até',
+                    prefixIcon: Icon(Icons.event_rounded),
                   ),
-                  validator: _validateOptionalAmount,
+                  child: Text(_formatDate(_targetDate)),
                 ),
-              ],
+              ),
               const SizedBox(height: 14),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
@@ -664,6 +1309,20 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickTargetDate() async {
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year, now.month, now.day);
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _targetDate.isBefore(firstDate) ? firstDate : _targetDate,
+      firstDate: firstDate,
+      lastDate: DateTime(now.year + 30),
+    );
+    if (pickedDate != null) {
+      setState(() => _targetDate = pickedDate);
+    }
   }
 
   String? _validatePositiveAmount(String? value) {
@@ -693,9 +1352,20 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
       await widget.onSubmit(
         name: _nameController.text.trim(),
         targetCents: CurrencyUtils.parseToCents(_targetController.text),
-        initialBalanceCents: _isEditing
-            ? widget.goal!.balanceCents
-            : CurrencyUtils.parseToCents(_initialBalanceController.text),
+        targetDate: _targetDate,
+        linkedAccountId:
+            _shouldCreateLinkedAccount ? null : _selectedLinkedAccountValue,
+        linkedAccountDraft: _shouldCreateLinkedAccount
+            ? GoalLinkedAccountDraft(
+                name: _newAccountNameController.text.trim(),
+                bankName: _newAccountBankController.text.trim().isEmpty
+                    ? null
+                    : _newAccountBankController.text.trim(),
+                initialBalanceCents: CurrencyUtils.parseToCents(
+                  _newAccountInitialBalanceController.text,
+                ),
+              )
+            : null,
         includeInTotalBalance: _includeInTotalBalance,
       );
       if (mounted) {
@@ -716,348 +1386,10 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
   }
 }
 
-class _GoalsHeaderCard extends StatelessWidget {
-  const _GoalsHeaderCard({required this.state});
+class _LinkedBalancePreview extends StatelessWidget {
+  const _LinkedBalancePreview({required this.amountCents});
 
-  final GoalsState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final progress = state.overallProgress.clamp(0.0, 1.0).toDouble();
-    final progressPercent = (progress * 100).round();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.primaryDark, colors.primary],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Metas financeiras',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-              ),
-              _HeaderBadge(label: state.monthLabel),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Text(
-            '$progressPercent%',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            state.activeGoalsCount == 1
-                ? '1 objetivo acompanhado'
-                : '${state.activeGoalsCount} objetivos acompanhados',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.78),
-                ),
-          ),
-          const SizedBox(height: 18),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              backgroundColor: Colors.white.withValues(alpha: 0.18),
-              valueColor: AlwaysStoppedAnimation<Color>(colors.primaryLight),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeaderBadge extends StatelessWidget {
-  const _HeaderBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GoalMetrics extends StatelessWidget {
-  const _GoalMetrics({required this.state});
-
-  final GoalsState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        final width = (constraints.maxWidth - spacing) / 2;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            SizedBox(
-              width: width,
-              child: _MetricCard(
-                label: 'Saldo livre',
-                value: CurrencyUtils.formatCents(state.monthlySavingsCents),
-                icon: Icons.savings_rounded,
-                color: context.colors.success,
-              ),
-            ),
-            SizedBox(
-              width: width,
-              child: _MetricCard(
-                label: 'Reserva',
-                value: '${(state.emergencyReserveProgress * 100).round()}%',
-                icon: Icons.shield_rounded,
-                color: context.colors.primary,
-              ),
-            ),
-            SizedBox(
-              width: width,
-              child: _MetricCard(
-                label: 'Metas',
-                value: CurrencyUtils.formatCents(state.goalBalanceCents),
-                icon: Icons.flag_rounded,
-                color: context.colors.info,
-              ),
-            ),
-            SizedBox(
-              width: width,
-              child: _MetricCard(
-                label: 'Progresso',
-                value: '${(state.goalProgress * 100).round()}%',
-                icon: Icons.track_changes_rounded,
-                color: context.colors.warning,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: colors.isDark ? 0.32 : 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.13),
-            foregroundColor: color,
-            child: Icon(icon),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoalProgressTile extends StatelessWidget {
-  const _GoalProgressTile({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    required this.currentLabel,
-    required this.targetLabel,
-    required this.progress,
-    required this.statusLabel,
-    required this.footer,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final String currentLabel;
-  final String targetLabel;
-  final double progress;
-  final String statusLabel;
-  final String footer;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: color.withValues(alpha: 0.13),
-                foregroundColor: color,
-                child: Icon(icon),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _StatusChip(label: statusLabel, color: color),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _GoalValueBlock(label: 'Atual', value: currentLabel),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _GoalValueBlock(label: 'Meta', value: targetLabel),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: clampedProgress,
-              minHeight: 9,
-              backgroundColor: colors.border,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            footer,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colors.textSecondary,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoalValueBlock extends StatelessWidget {
-  const _GoalValueBlock({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
+  final int amountCents;
 
   @override
   Widget build(BuildContext context) {
@@ -1066,28 +1398,34 @@ class _GoalValueBlock extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.accentSoft,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(14),
+        child: Row(
           children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colors.textSecondary,
-                    fontWeight: FontWeight.w700,
+            Icon(Icons.savings_rounded, color: colors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Valor já aportado',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
+                  const SizedBox(height: 2),
+                  Text(
+                    CurrencyUtils.formatCents(amountCents),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                   ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1096,79 +1434,107 @@ class _GoalValueBlock extends StatelessWidget {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({
+class _GoalCardMetric extends StatelessWidget {
+  const _GoalCardMetric({
     required this.label,
-    required this.color,
+    required this.value,
   });
 
   final String label;
-  final Color color;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w900,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              alignment: Alignment.centerLeft,
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
               ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ReferenceRow extends StatelessWidget {
-  const _ReferenceRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.13),
-            foregroundColor: color,
-            child: Icon(icon),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colors.textPrimary,
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-        ],
-      ),
-    );
+double _goalProgress(int balanceCents, int targetCents) {
+  if (targetCents <= 0) {
+    return 0;
   }
+  return (balanceCents / targetCents).clamp(0.0, 1.0).toDouble();
+}
+
+int _monthlyContributionEstimate({
+  required int remainingCents,
+  required DateTime? targetDate,
+}) {
+  if (remainingCents <= 0) {
+    return 0;
+  }
+  if (targetDate == null) {
+    return remainingCents;
+  }
+
+  final now = DateTime.now();
+  final currentMonth = DateTime(now.year, now.month);
+  final targetMonth = DateTime(targetDate.year, targetDate.month);
+  final months = ((targetMonth.year - currentMonth.year) * 12) +
+      targetMonth.month -
+      currentMonth.month +
+      1;
+  final safeMonths = months.clamp(1, 360).toInt();
+  return ((remainingCents + safeMonths - 1) / safeMonths).floor();
+}
+
+String _formatDate(DateTime date) {
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
+
+String _shortMonth(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final year = (date.year % 100).toString().padLeft(2, '0');
+  return '$month/$year';
+}
+
+String _initialsFor(String name) {
+  final trimmedName = name.trim();
+  if (trimmedName.isEmpty) {
+    return '?';
+  }
+  return trimmedName.characters.take(2).toString().toUpperCase();
+}
+
+Color _shiftColor(Color color, {required double lightnessDelta}) {
+  final hsl = HSLColor.fromColor(color);
+  return hsl
+      .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+      .toColor();
 }

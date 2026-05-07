@@ -9,6 +9,7 @@ import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../data/models/subcategory_model.dart';
 import '../../data/models/transaction_name_suggestion.dart';
+import '../../shared/widgets/form_option_selector.dart';
 import '../../shared/widgets/name_prompt_dialog.dart';
 import 'card_expense_form_view_model.dart';
 import 'transaction_suggestion_strip.dart';
@@ -163,25 +164,21 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Tipo',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+                FormOptionSelector<_ExpenseKind>(
+                  title: 'Tipo',
+                  value: _expenseKind,
+                  options: [
                     for (final kind in _ExpenseKind.values)
-                      ChoiceChip(
-                        selected: _expenseKind == kind,
-                        label: Text(kind.label),
-                        avatar: Icon(kind.icon, size: 18),
-                        onSelected: (_) {
-                          setState(() => _expenseKind = kind);
-                        },
+                      FormOption(
+                        value: kind,
+                        label: kind.label,
+                        icon: kind.icon,
+                        description: kind.description,
                       ),
                   ],
+                  onChanged: (kind) {
+                    setState(() => _expenseKind = kind);
+                  },
                 ),
                 if (_expenseKind == _ExpenseKind.installment) ...[
                   const SizedBox(height: 14),
@@ -203,30 +200,21 @@ class _CardExpenseFormSheetState extends ConsumerState<CardExpenseFormSheet> {
                     },
                   ),
                   const SizedBox(height: 14),
-                  Text(
-                    'Valor informado',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
+                  FormOptionSelector<_InstallmentAmountMode>(
+                    title: 'Valor informado',
+                    value: _installmentAmountMode,
+                    options: [
                       for (final mode in _InstallmentAmountMode.values)
-                        ChoiceChip(
-                          selected: _installmentAmountMode == mode,
-                          label: Text(mode.label),
-                          avatar: Icon(mode.icon, size: 18),
-                          onSelected: (_) {
-                            setState(() => _installmentAmountMode = mode);
-                          },
+                        FormOption(
+                          value: mode,
+                          label: mode.label,
+                          icon: mode.icon,
+                          description: mode.description,
                         ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _installmentAmountMode.description,
-                    style: Theme.of(context).textTheme.bodySmall,
+                    onChanged: (mode) {
+                      setState(() => _installmentAmountMode = mode);
+                    },
                   ),
                 ],
                 const SizedBox(height: 14),
@@ -741,14 +729,30 @@ class _MissingRequirement extends StatelessWidget {
 }
 
 enum _ExpenseKind {
-  single('single', 'Única', Icons.looks_one_rounded),
-  installment('installment', 'Parcelada', Icons.view_week_rounded),
-  fixedMonthly('fixed_monthly', 'Fixa mensal', Icons.event_repeat_rounded);
+  single(
+    'single',
+    'Única',
+    'Compra apenas na fatura selecionada.',
+    Icons.looks_one_rounded,
+  ),
+  installment(
+    'installment',
+    'Parcelada',
+    'Divide a compra em faturas mensais.',
+    Icons.view_week_rounded,
+  ),
+  fixedMonthly(
+    'fixed_monthly',
+    'Fixa mensal',
+    'Repete mensalmente neste cartão.',
+    Icons.event_repeat_rounded,
+  );
 
-  const _ExpenseKind(this.value, this.label, this.icon);
+  const _ExpenseKind(this.value, this.label, this.description, this.icon);
 
   final String value;
   final String label;
+  final String description;
   final IconData icon;
 }
 

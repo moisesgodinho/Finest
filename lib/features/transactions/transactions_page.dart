@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
@@ -7,6 +8,8 @@ import '../../data/models/account_preview.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/subcategory_model.dart';
 import '../../data/models/transaction_series_scope.dart';
+import '../../shared/widgets/form_option_selector.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
 import '../../shared/widgets/section_card.dart';
 import 'transactions_view_model.dart';
 
@@ -100,8 +103,6 @@ class TransactionsPage extends ConsumerWidget {
                                 group: group,
                                 onOpen: (transaction) => _openTransactionDetail(
                                   context,
-                                  ref,
-                                  viewModel,
                                   transaction,
                                 ),
                                 onEdit: (transaction) => _openEditForm(
@@ -201,39 +202,9 @@ class TransactionsPage extends ConsumerWidget {
 
   Future<void> _openTransactionDetail(
     BuildContext context,
-    WidgetRef ref,
-    TransactionsViewModel viewModel,
     TransactionListItem transaction,
   ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: context.colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        return _TransactionDetailSheet(
-          transaction: transaction,
-          onEdit: transaction.isCreditCard
-              ? null
-              : () async {
-                  Navigator.of(context).pop();
-                  await _openEditForm(context, ref, transaction);
-                },
-          onMarkAsPaid: transaction.isPaid
-              ? null
-              : () async {
-                  Navigator.of(context).pop();
-                  await _confirmMarkAsPaid(context, viewModel, transaction);
-                },
-          onDelete: () async {
-            Navigator.of(context).pop();
-            await _confirmDelete(context, viewModel, transaction);
-          },
-        );
-      },
-    );
+    await context.push(_transactionDetailsPath(transaction));
   }
 
   Future<void> _openEditForm(
@@ -484,6 +455,367 @@ class TransactionsPage extends ConsumerWidget {
       await viewModel.markItemAsPaid(transaction);
     }
   }
+}
+
+class TransactionDetailPage extends ConsumerWidget {
+  const TransactionDetailPage({
+    required this.kind,
+    required this.transactionId,
+    super.key,
+  });
+
+  final TransactionEntryKind kind;
+  final int transactionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(transactionsViewModelProvider);
+    final viewModel = ref.read(transactionsViewModelProvider.notifier);
+    final transaction = state.transactions
+        .where((item) => item.kind == kind && item.id == transactionId)
+        .firstOrNull;
+
+    ref.listen(
+      transactionsViewModelProvider.select((state) => state.errorMessage),
+      (previous, next) {
+        if (next == null || next == previous) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next)),
+        );
+      },
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(transaction?.title ?? 'Transação'),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: transaction == null
+            ? _MissingTransactionView(isLoading: state.isLoading)
+            : _TransactionDetailSheet(
+                transaction: transaction,
+                onEdit: transaction.isCreditCard
+                    ? null
+                    : () => _openEditForm(context, ref, transaction),
+                onMarkAsPaid: transaction.isPaid
+                    ? null
+                    : () => _confirmMarkAsPaid(
+                          context,
+                          viewModel,
+                          transaction,
+                          showSuccessMessage: true,
+                        ),
+                onDelete: () => _confirmDelete(
+                  context,
+                  viewModel,
+                  transaction,
+                  popAfterDelete: true,
+                  showSuccessMessage: true,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _openEditForm(
+    BuildContext context,
+    WidgetRef ref,
+    TransactionListItem transaction,
+  ) async {
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'editar',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
+    final state = ref.read(transactionsViewModelProvider);
+    final viewModel = ref.read(transactionsViewModelProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        if (transaction.isTransfer) {
+          return TransferEditFormSheet(
+            transfer: transaction,
+            accounts: state.accounts,
+            onSubmit: ({
+              required int fromAccountId,
+              required int toAccountId,
+              required String name,
+              required int amountCents,
+              required String transferKind,
+              required DateTime dueDate,
+              required bool isPaid,
+              required DateTime date,
+              int? totalInstallments,
+            }) async {
+              await viewModel.updateTransfer(
+                transfer: transaction,
+                fromAccountId: fromAccountId,
+                toAccountId: toAccountId,
+                name: name,
+                amountCents: amountCents,
+                transferKind: transferKind,
+                dueDate: dueDate,
+                isPaid: isPaid,
+                date: date,
+                totalInstallments: totalInstallments,
+                scope: scope,
+              );
+            },
+          );
+        }
+
+        return TransactionEditFormSheet(
+          transaction: transaction,
+          accounts: state.accounts,
+          categories: state.categories,
+          subcategories: state.subcategories,
+          onSubmit: ({
+            required int accountId,
+            required int categoryId,
+            required String type,
+            required String description,
+            required int amountCents,
+            required DateTime? dueDate,
+            required DateTime date,
+            required bool isPaid,
+            int? subcategoryId,
+            String? transactionKind,
+            int? totalInstallments,
+          }) async {
+            await viewModel.updateTransaction(
+              transaction: transaction,
+              accountId: accountId,
+              categoryId: categoryId,
+              type: type,
+              description: description,
+              amountCents: amountCents,
+              dueDate: dueDate,
+              date: date,
+              isPaid: isPaid,
+              subcategoryId: subcategoryId,
+              transactionKind: transactionKind,
+              totalInstallments: totalInstallments,
+              scope: scope,
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Lançamento atualizado.')),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    TransactionsViewModel viewModel,
+    TransactionListItem transaction, {
+    bool popAfterDelete = false,
+    bool showSuccessMessage = false,
+  }) async {
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'remover',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Remover lançamento?'),
+          content: Text(
+            transaction.isTransfer
+                ? 'As contas da transferência serão ajustadas automaticamente.'
+                : 'O saldo da conta ou a fatura serão ajustados automaticamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remover'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.deleteItem(transaction, scope: scope);
+    if (!context.mounted) {
+      return;
+    }
+    if (showSuccessMessage) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Lançamento removido.')),
+      );
+    }
+    if (popAfterDelete) {
+      context.pop();
+    }
+  }
+
+  Future<TransactionSeriesScope?> _selectSeriesScope(
+    BuildContext context,
+    TransactionListItem transaction, {
+    required String actionLabel,
+  }) async {
+    if (!transaction.supportsSeriesScope) {
+      return TransactionSeriesScope.current;
+    }
+
+    return showModalBottomSheet<TransactionSeriesScope>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aplicar ao $actionLabel',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha quais parcelas devem receber esta alteração.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _SeriesScopeTile(
+                  icon: Icons.event_rounded,
+                  title: 'Somente este mês',
+                  subtitle: 'Aplica apenas na parcela selecionada.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.current,
+                  ),
+                ),
+                _SeriesScopeTile(
+                  icon: Icons.update_rounded,
+                  title: 'Este mês e próximos',
+                  subtitle: 'Aplica desta parcela em diante.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.currentAndFuture,
+                  ),
+                ),
+                _SeriesScopeTile(
+                  icon: Icons.all_inclusive_rounded,
+                  title: 'Todas as parcelas',
+                  subtitle: 'Inclui parcelas anteriores e futuras.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.all,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmMarkAsPaid(
+    BuildContext context,
+    TransactionsViewModel viewModel,
+    TransactionListItem transaction, {
+    bool showSuccessMessage = false,
+  }) async {
+    final shouldMark = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Efetivar lançamento?'),
+          content: Text(
+            transaction.isTransfer
+                ? 'O valor sairá da origem e entrará na conta de destino.'
+                : 'O saldo da conta ou a fatura serão atualizados automaticamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Efetivar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldMark != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.markItemAsPaid(transaction);
+    if (showSuccessMessage) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Lançamento efetivado.')),
+      );
+    }
+  }
+}
+
+class _MissingTransactionView extends StatelessWidget {
+  const _MissingTransactionView({required this.isLoading});
+
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return const _CenteredMessage(
+      icon: Icons.receipt_long_outlined,
+      title: 'Transação não encontrada.',
+      subtitle: 'Ela pode ter sido removida ou ainda não foi carregada.',
+    );
+  }
+}
+
+String _transactionDetailsPath(TransactionListItem transaction) {
+  return '/transactions/${transaction.kind.name}/${transaction.id}';
 }
 
 class _MonthSelector extends StatelessWidget {
@@ -1110,7 +1442,7 @@ class _TransactionTile extends StatelessWidget {
                 prefix: amountPrefix,
                 color: amountColor,
               ),
-              PopupMenuButton<String>(
+              AppPopupMenuButton<String>(
                 tooltip: 'Ações',
                 onSelected: (value) {
                   if (value == 'edit') {
@@ -1125,16 +1457,26 @@ class _TransactionTile extends StatelessWidget {
                   if (onEdit != null)
                     const PopupMenuItem(
                       value: 'edit',
-                      child: Text('Editar'),
+                      child: AppPopupMenuItem(
+                        icon: Icons.edit_rounded,
+                        label: 'Editar',
+                      ),
                     ),
                   if (onMarkAsPaid != null)
                     const PopupMenuItem(
                       value: 'pay',
-                      child: Text('Efetivar'),
+                      child: AppPopupMenuItem(
+                        icon: Icons.check_circle_rounded,
+                        label: 'Efetivar',
+                      ),
                     ),
                   const PopupMenuItem(
                     value: 'delete',
-                    child: Text('Remover'),
+                    child: AppPopupMenuItem(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Remover',
+                      isDestructive: true,
+                    ),
                   ),
                 ],
               ),
@@ -2090,26 +2432,30 @@ class _KindSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<String>(
-      segments: const [
-        ButtonSegment(
+    return FormOptionSelector<String>(
+      title: 'Tipo',
+      value: value,
+      options: const [
+        FormOption(
           value: 'single',
-          label: Text('Única'),
-          icon: Icon(Icons.looks_one_rounded),
+          label: 'Única',
+          description: 'Lançamento avulso.',
+          icon: Icons.looks_one_rounded,
         ),
-        ButtonSegment(
+        FormOption(
           value: 'installment',
-          label: Text('Parcelada'),
-          icon: Icon(Icons.format_list_numbered_rounded),
+          label: 'Parcelada',
+          description: 'Mantém o vínculo entre parcelas.',
+          icon: Icons.format_list_numbered_rounded,
         ),
-        ButtonSegment(
+        FormOption(
           value: 'fixed_monthly',
-          label: Text('Fixa'),
-          icon: Icon(Icons.repeat_rounded),
+          label: 'Fixa mensal',
+          description: 'Repete mensalmente.',
+          icon: Icons.repeat_rounded,
         ),
       ],
-      selected: {value},
-      onSelectionChanged: (selection) => onChanged(selection.first),
+      onChanged: onChanged,
     );
   }
 }

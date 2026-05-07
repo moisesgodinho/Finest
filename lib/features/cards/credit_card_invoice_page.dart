@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
@@ -11,6 +12,7 @@ import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
 import '../../data/models/subcategory_model.dart';
 import '../../data/models/transaction_series_scope.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
 import '../../shared/widgets/section_card.dart';
 import 'cards_view_model.dart';
 
@@ -29,6 +31,562 @@ class CreditCardInvoicePage extends ConsumerStatefulWidget {
   @override
   ConsumerState<CreditCardInvoicePage> createState() =>
       _CreditCardInvoicePageState();
+}
+
+class CreditCardTransactionDetailPage extends ConsumerWidget {
+  const CreditCardTransactionDetailPage({
+    required this.transactionId,
+    super.key,
+  });
+
+  final int transactionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(cardsViewModelProvider);
+    final viewModel = ref.read(cardsViewModelProvider.notifier);
+    final selection = _findTransaction(state);
+
+    ref.listen(cardsViewModelProvider.select((state) => state.errorMessage), (
+      previous,
+      next,
+    ) {
+      if (next == null || next == previous) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(next)),
+      );
+    });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(selection?.transaction.description ?? 'Registro'),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: selection == null
+            ? _MissingCardTransactionView(isLoading: state.isLoading)
+            : _CardTransactionDetailContent(
+                selection: selection,
+                category: state.categories
+                    .where(
+                      (category) =>
+                          category.id == selection.transaction.categoryId,
+                    )
+                    .firstOrNull,
+                onEdit: selection.invoice.isPaid
+                    ? null
+                    : () => _openEditPurchaseSheet(
+                          context,
+                          viewModel,
+                          selection.invoice,
+                          selection.transaction,
+                          selection.transaction.isCredit
+                              ? state.incomeCategories
+                              : state.expenseCategories,
+                          state.subcategories,
+                        ),
+                onDelete: selection.invoice.isPaid
+                    ? null
+                    : () => _confirmDeletePurchase(
+                          context,
+                          viewModel,
+                          selection.invoice,
+                          selection.transaction,
+                        ),
+              ),
+      ),
+    );
+  }
+
+  _CardTransactionSelection? _findTransaction(CardsState state) {
+    for (final invoice in state.invoices) {
+      for (final transaction in invoice.transactions) {
+        if (transaction.id == transactionId) {
+          final card = state.cards
+              .where((card) => card.id == invoice.cardId)
+              .firstOrNull;
+          return _CardTransactionSelection(
+            invoice: invoice,
+            transaction: transaction,
+            card: card,
+          );
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openEditPurchaseSheet(
+    BuildContext context,
+    CardsViewModel viewModel,
+    CreditCardInvoicePreview invoice,
+    CreditCardInvoiceTransactionPreview transaction,
+    List<CategoryModel> categories,
+    List<SubcategoryModel> subcategories,
+  ) async {
+    if (invoice.isPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fatura paga não pode ser alterada.')),
+      );
+      return;
+    }
+    if (categories.isEmpty) {
+      final categoryType = transaction.isCredit ? 'receita' : 'despesa';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Crie uma categoria de $categoryType primeiro.'),
+        ),
+      );
+      return;
+    }
+
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'editar',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
+    final edit = await showModalBottomSheet<_PurchaseEditData>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return _PurchaseEditSheet(
+          transaction: transaction,
+          categories: categories,
+          subcategories: subcategories,
+        );
+      },
+    );
+
+    if (edit == null) {
+      return;
+    }
+
+    await viewModel.updateInvoiceTransaction(
+      invoice: invoice,
+      transaction: transaction,
+      description: edit.description,
+      amountCents: edit.amountCents,
+      categoryId: edit.categoryId,
+      subcategoryId: edit.subcategoryId,
+      date: edit.date,
+      scope: scope,
+    );
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registro atualizado.')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeletePurchase(
+    BuildContext context,
+    CardsViewModel viewModel,
+    CreditCardInvoicePreview invoice,
+    CreditCardInvoiceTransactionPreview transaction,
+  ) async {
+    if (invoice.isPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fatura paga não pode ser alterada.')),
+      );
+      return;
+    }
+
+    final scope = await _selectSeriesScope(
+      context,
+      transaction,
+      actionLabel: 'remover',
+    );
+    if (scope == null || !context.mounted) {
+      return;
+    }
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Remover registro?'),
+          content: const Text(
+            'O total da fatura será recalculado automaticamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remover'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !context.mounted) {
+      return;
+    }
+
+    await viewModel.deleteInvoiceTransaction(
+      invoice: invoice,
+      transaction: transaction,
+      scope: scope,
+    );
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registro removido.')),
+      );
+      context.pop();
+    }
+  }
+
+  Future<TransactionSeriesScope?> _selectSeriesScope(
+    BuildContext context,
+    CreditCardInvoiceTransactionPreview transaction, {
+    required String actionLabel,
+  }) async {
+    if (!transaction.supportsSeriesScope) {
+      return TransactionSeriesScope.current;
+    }
+
+    return showModalBottomSheet<TransactionSeriesScope>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aplicar ao $actionLabel',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha quais parcelas devem receber esta alteração.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.event_rounded,
+                  title: 'Somente este mês',
+                  subtitle: 'Aplica apenas na parcela desta fatura.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.current,
+                  ),
+                ),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.update_rounded,
+                  title: 'Este mês e próximos',
+                  subtitle: 'Aplica desta parcela em diante.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.currentAndFuture,
+                  ),
+                ),
+                _InvoiceSeriesScopeTile(
+                  icon: Icons.all_inclusive_rounded,
+                  title: 'Todas as parcelas',
+                  subtitle: 'Inclui parcelas anteriores e futuras.',
+                  onTap: () => Navigator.of(context).pop(
+                    TransactionSeriesScope.all,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CardTransactionSelection {
+  const _CardTransactionSelection({
+    required this.invoice,
+    required this.transaction,
+    required this.card,
+  });
+
+  final CreditCardInvoicePreview invoice;
+  final CreditCardInvoiceTransactionPreview transaction;
+  final CreditCardPreview? card;
+}
+
+class _MissingCardTransactionView extends StatelessWidget {
+  const _MissingCardTransactionView({required this.isLoading});
+
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading) ...[
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+            ] else ...[
+              Icon(
+                Icons.receipt_long_outlined,
+                size: 46,
+                color: colors.textSecondary,
+              ),
+              const SizedBox(height: 14),
+            ],
+            Text(
+              isLoading ? 'Carregando registro...' : 'Registro não encontrado.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (!isLoading) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ele pode ter sido removido ou ainda não foi carregado.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardTransactionDetailContent extends StatelessWidget {
+  const _CardTransactionDetailContent({
+    required this.selection,
+    required this.category,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final _CardTransactionSelection selection;
+  final CategoryModel? category;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final transaction = selection.transaction;
+    final invoice = selection.invoice;
+    final colors = context.colors;
+    final isCredit = transaction.isCredit;
+    final amountColor = isCredit ? colors.success : colors.danger;
+    final categoryIcon = category?.icon ?? Icons.category_rounded;
+    final categoryColor = category?.color ?? AppColors.primary;
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        28 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
+      children: [
+        SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: categoryColor.withValues(alpha: 0.13),
+                    foregroundColor: categoryColor,
+                    child: Icon(categoryIcon),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          transaction.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          invoice.isPaid
+                              ? 'Fatura paga'
+                              : 'Fatura ${invoice.statusLabel.toLowerCase()}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                '${isCredit ? '+ ' : '- '}${CurrencyUtils.formatCents(
+                  transaction.amountCents,
+                  currencyCode: transaction.currencyCode,
+                )}',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              if (transaction.currencyCode.toUpperCase() !=
+                  invoice.currencyCode.toUpperCase()) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '≈ ${CurrencyUtils.formatCents(
+                    transaction.displayAmountCents,
+                    currencyCode: invoice.currencyCode,
+                  )}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SectionCard(
+          title: 'Detalhes',
+          child: Column(
+            children: [
+              _InvoiceDetailRow(
+                  label: 'Tipo', value: transaction.entryKindLabel),
+              _InvoiceDetailRow(
+                  label: 'Data', value: _formatDate(transaction.date)),
+              _InvoiceDetailRow(
+                label: 'Cartão',
+                value: '${invoice.cardName} •••• ${invoice.cardLastDigits}',
+              ),
+              _InvoiceDetailRow(
+                label: 'Fatura',
+                value:
+                    '${invoice.month.toString().padLeft(2, '0')}/${invoice.year}',
+              ),
+              _InvoiceDetailRow(
+                label: 'Vencimento',
+                value: _formatDate(invoice.dueDate),
+              ),
+              _InvoiceDetailRow(
+                label: 'Pagamento',
+                value: invoice.paymentAccountName ?? 'Conta padrão do cartão',
+              ),
+              _InvoiceDetailRow(
+                label: 'Categoria',
+                value: transaction.categoryName,
+              ),
+              if (transaction.subcategoryName != null)
+                _InvoiceDetailRow(
+                  label: 'Subcategoria',
+                  value: transaction.subcategoryName!,
+                ),
+              if (transaction.installmentNumber != null &&
+                  transaction.totalInstallments != null)
+                _InvoiceDetailRow(
+                  label: 'Parcela',
+                  value:
+                      '${transaction.installmentNumber}/${transaction.totalInstallments}',
+                ),
+            ],
+          ),
+        ),
+        if (invoice.isPaid) ...[
+          const SizedBox(height: 14),
+          const _LockedInvoiceNotice(),
+        ],
+        const SizedBox(height: 18),
+        if (onEdit != null) ...[
+          FilledButton.icon(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_rounded),
+            label: const Text('Editar registro'),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (onDelete != null)
+          OutlinedButton.icon(
+            onPressed: onDelete,
+            icon: Icon(Icons.delete_outline_rounded, color: colors.danger),
+            label: Text(
+              'Remover',
+              style: TextStyle(color: colors.danger),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _InvoiceDetailRow extends StatelessWidget {
+  const _InvoiceDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
@@ -75,10 +633,13 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       );
     }
 
+    final firstAvailableMonth =
+        card.firstAvailableMonth ?? state.firstAvailableMonth;
+    final visibleMonth = _maxMonth(_visibleMonth, firstAvailableMonth);
     final invoice = state.invoiceForCardMonth(
       card,
-      month: _visibleMonth.month,
-      year: _visibleMonth.year,
+      month: visibleMonth.month,
+      year: visibleMonth.year,
     );
     final invoiceMonths = state.invoiceMonthsForCard(card);
     final expenseCategories = state.expenseCategories;
@@ -97,8 +658,12 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
           PopupMenuButton<DateTime>(
             tooltip: 'Selecionar fatura',
             icon: const Icon(Icons.calendar_month_rounded),
+            position: PopupMenuPosition.under,
             onSelected: (month) {
-              setState(() => _visibleMonth = month);
+              setState(() => _visibleMonth = _maxMonth(
+                    month,
+                    firstAvailableMonth,
+                  ));
             },
             itemBuilder: (context) {
               return [
@@ -114,7 +679,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
       ),
       floatingActionButton: invoice.isPaid
           ? null
-          : FloatingActionButton.extended(
+          : FloatingActionButton(
               onPressed: () => _openAddInvoiceEntrySheet(
                 context,
                 viewModel,
@@ -122,8 +687,7 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
                 invoice,
                 state,
               ),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Registro'),
+              child: const Icon(Icons.add_rounded, size: 34),
             ),
       body: SafeArea(
         bottom: false,
@@ -142,8 +706,17 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
             _InvoiceHero(
               card: card,
               invoice: invoice,
-              onPrevious: () => _moveMonth(-1),
-              onNext: () => _moveMonth(1),
+              canGoPrevious: _isAfterMonth(visibleMonth, firstAvailableMonth),
+              onPrevious: () => _moveMonth(
+                -1,
+                currentMonth: visibleMonth,
+                firstAvailableMonth: firstAvailableMonth,
+              ),
+              onNext: () => _moveMonth(
+                1,
+                currentMonth: visibleMonth,
+                firstAvailableMonth: firstAvailableMonth,
+              ),
             ),
             if (invoice.canPay && invoice.id > 0) ...[
               const SizedBox(height: 12),
@@ -192,6 +765,9 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
                             transaction: transaction,
                             category: categoriesById[transaction.categoryId],
                             isLocked: invoice.isPaid,
+                            onOpen: () => context.push(
+                              cardTransactionDetailsPath(transaction.id),
+                            ),
                             onEdit: () => _openEditPurchaseSheet(
                               context,
                               viewModel,
@@ -324,9 +900,16 @@ class _CreditCardInvoicePageState extends ConsumerState<CreditCardInvoicePage> {
     return null;
   }
 
-  void _moveMonth(int delta) {
+  void _moveMonth(
+    int delta, {
+    required DateTime currentMonth,
+    required DateTime firstAvailableMonth,
+  }) {
     setState(() {
-      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
+      _visibleMonth = _maxMonth(
+        DateTime(currentMonth.year, currentMonth.month + delta),
+        firstAvailableMonth,
+      );
     });
   }
 
@@ -966,12 +1549,14 @@ class _InvoiceHero extends StatelessWidget {
   const _InvoiceHero({
     required this.card,
     required this.invoice,
+    required this.canGoPrevious,
     required this.onPrevious,
     required this.onNext,
   });
 
   final CreditCardPreview card;
   final CreditCardInvoicePreview invoice;
+  final bool canGoPrevious;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
@@ -981,6 +1566,7 @@ class _InvoiceHero extends StatelessWidget {
       children: [
         _InvoiceMonthSelector(
           invoice: invoice,
+          canGoPrevious: canGoPrevious,
           onPrevious: onPrevious,
           onNext: onNext,
         ),
@@ -997,11 +1583,13 @@ class _InvoiceHero extends StatelessWidget {
 class _InvoiceMonthSelector extends StatelessWidget {
   const _InvoiceMonthSelector({
     required this.invoice,
+    required this.canGoPrevious,
     required this.onPrevious,
     required this.onNext,
   });
 
   final CreditCardInvoicePreview invoice;
+  final bool canGoPrevious;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
@@ -1012,7 +1600,7 @@ class _InvoiceMonthSelector extends StatelessWidget {
     return Row(
       children: [
         IconButton.filledTonal(
-          onPressed: onPrevious,
+          onPressed: canGoPrevious ? onPrevious : null,
           tooltip: 'Fatura anterior',
           icon: const Icon(Icons.chevron_left_rounded),
         ),
@@ -1587,6 +2175,7 @@ class _InvoicePurchaseTile extends StatelessWidget {
     required this.transaction,
     required this.category,
     required this.isLocked,
+    required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1594,6 +2183,7 @@ class _InvoicePurchaseTile extends StatelessWidget {
   final CreditCardInvoiceTransactionPreview transaction;
   final CategoryModel? category;
   final bool isLocked;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -1613,85 +2203,89 @@ class _InvoicePurchaseTile extends StatelessWidget {
         ? '${transaction.entryKindLabel} - $category'
         : '$category$installment';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          _CategoryIconBadge(
-            icon: categoryIcon,
-            color: categoryColor,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: InkWell(
-              onTap: isLocked ? null : onEdit,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      transaction.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      displayDetail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
+    return InkWell(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            _CategoryIconBadge(
+              icon: categoryIcon,
+              color: categoryColor,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    displayDetail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          _InvoiceTransactionAmountDate(
-            amount: transaction.isCredit
-                ? '+ ${CurrencyUtils.formatCents(
-                    transaction.amountCents,
-                    currencyCode: transaction.currencyCode,
-                  )}'
-                : CurrencyUtils.formatCents(
-                    transaction.amountCents,
-                    currencyCode: transaction.currencyCode,
-                  ),
-            date: _formatDate(transaction.date),
-            amountColor: transaction.isCredit ? colors.success : null,
-          ),
-          if (!isLocked)
-            PopupMenuButton<_PurchaseAction>(
-              onSelected: (action) {
-                switch (action) {
-                  case _PurchaseAction.edit:
-                    onEdit();
-                  case _PurchaseAction.delete:
-                    onDelete();
-                }
-              },
-              itemBuilder: (context) {
-                return const [
-                  PopupMenuItem(
-                    value: _PurchaseAction.edit,
-                    child: Text('Editar'),
-                  ),
-                  PopupMenuItem(
-                    value: _PurchaseAction.delete,
-                    child: Text('Remover'),
-                  ),
-                ];
-              },
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.only(left: 8),
-              child: Icon(Icons.lock_rounded, size: 20),
+            const SizedBox(width: 8),
+            _InvoiceTransactionAmountDate(
+              amount: transaction.isCredit
+                  ? '+ ${CurrencyUtils.formatCents(
+                      transaction.amountCents,
+                      currencyCode: transaction.currencyCode,
+                    )}'
+                  : CurrencyUtils.formatCents(
+                      transaction.amountCents,
+                      currencyCode: transaction.currencyCode,
+                    ),
+              date: _formatDate(transaction.date),
+              amountColor: transaction.isCredit ? colors.success : null,
             ),
-        ],
+            if (!isLocked)
+              AppPopupMenuButton<_PurchaseAction>(
+                onSelected: (action) {
+                  switch (action) {
+                    case _PurchaseAction.edit:
+                      onEdit();
+                    case _PurchaseAction.delete:
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) {
+                  return const [
+                    PopupMenuItem(
+                      value: _PurchaseAction.edit,
+                      child: AppPopupMenuItem(
+                        icon: Icons.edit_rounded,
+                        label: 'Editar',
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: _PurchaseAction.delete,
+                      child: AppPopupMenuItem(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Remover',
+                        isDestructive: true,
+                      ),
+                    ),
+                  ];
+                },
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Icon(Icons.lock_rounded, size: 20),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2294,9 +2888,27 @@ String _formatDate(DateTime date) {
   return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 }
 
+String cardTransactionDetailsPath(int transactionId) {
+  return '/card-transactions/$transactionId';
+}
+
 String _seriesBaseName(String value) {
   return value.trim().replaceFirst(
         RegExp(r'\s*\(\d+/\d+\)\s*$'),
         '',
       );
+}
+
+bool _isBeforeMonth(DateTime left, DateTime right) {
+  return left.year < right.year ||
+      (left.year == right.year && left.month < right.month);
+}
+
+bool _isAfterMonth(DateTime left, DateTime right) {
+  return left.year > right.year ||
+      (left.year == right.year && left.month > right.month);
+}
+
+DateTime _maxMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? right : left;
 }

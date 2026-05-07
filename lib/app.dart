@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/currency/exchange_rate_service.dart';
@@ -24,17 +23,8 @@ class FinestApp extends ConsumerWidget {
       themeMode: themePreference.themeMode,
       routerConfig: router,
       builder: (context, child) {
-        final isLight = Theme.of(context).brightness == Brightness.light;
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness:
-                isLight ? Brightness.dark : Brightness.light,
-            statusBarBrightness: isLight ? Brightness.light : Brightness.dark,
-            systemNavigationBarColor: Theme.of(context).colorScheme.surface,
-            systemNavigationBarIconBrightness:
-                isLight ? Brightness.dark : Brightness.light,
-          ),
+        return AnnotatedRegion(
+          value: AppTheme.systemOverlayStyleFor(context),
           child: child ?? const SizedBox.shrink(),
         );
       },

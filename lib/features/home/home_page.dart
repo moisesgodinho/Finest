@@ -9,6 +9,7 @@ import '../../data/models/category_expense_preview.dart';
 import '../../data/models/transaction_preview.dart';
 import '../../data/models/transaction_series_scope.dart';
 import '../../shared/widgets/balance_card.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../shared/widgets/section_card.dart';
 import '../accounts/accounts_page.dart';
@@ -1820,7 +1821,7 @@ class _PendingTransactionTile extends StatelessWidget {
             prefix: _amountPrefix(transaction),
             color: amountColor,
           ),
-          PopupMenuButton<_PendingTransactionAction>(
+          AppPopupMenuButton<_PendingTransactionAction>(
             tooltip: 'Opções',
             onSelected: (action) {
               switch (action) {
@@ -1838,15 +1839,25 @@ class _PendingTransactionTile extends StatelessWidget {
             itemBuilder: (context) => const [
               PopupMenuItem(
                 value: _PendingTransactionAction.edit,
-                child: Text('Editar'),
+                child: AppPopupMenuItem(
+                  icon: Icons.edit_rounded,
+                  label: 'Editar',
+                ),
               ),
               PopupMenuItem(
                 value: _PendingTransactionAction.markAsPaid,
-                child: Text('Efetivar'),
+                child: AppPopupMenuItem(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Efetivar',
+                ),
               ),
               PopupMenuItem(
                 value: _PendingTransactionAction.delete,
-                child: Text('Excluir'),
+                child: AppPopupMenuItem(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Excluir',
+                  isDestructive: true,
+                ),
               ),
             ],
           ),

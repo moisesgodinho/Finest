@@ -19,9 +19,16 @@ abstract class TransferRepository {
 
   Future<void> updateTransfer(UpdateTransferRequest request);
 
+  Future<void> updateTransfers(List<UpdateTransferRequest> requests);
+
   Future<void> deleteTransfer({
     required int userId,
     required int transferId,
+  });
+
+  Future<void> deleteTransfers({
+    required int userId,
+    required List<int> transferIds,
   });
 }
 
@@ -289,6 +296,20 @@ class DriftTransferRepository implements TransferRepository {
   }
 
   @override
+  Future<void> updateTransfers(List<UpdateTransferRequest> requests) async {
+    if (requests.isEmpty) {
+      return;
+    }
+    _ensureSingleUser(requests.map((request) => request.userId));
+
+    await _database.transaction(() async {
+      for (final request in requests) {
+        await updateTransfer(request);
+      }
+    });
+  }
+
+  @override
   Future<void> deleteTransfer({
     required int userId,
     required int transferId,
@@ -337,6 +358,22 @@ class DriftTransferRepository implements TransferRepository {
     });
   }
 
+  @override
+  Future<void> deleteTransfers({
+    required int userId,
+    required List<int> transferIds,
+  }) async {
+    if (transferIds.isEmpty) {
+      return;
+    }
+
+    await _database.transaction(() async {
+      for (final transferId in transferIds) {
+        await deleteTransfer(userId: userId, transferId: transferId);
+      }
+    });
+  }
+
   static const _validKinds = {
     'single',
     'installment',
@@ -370,6 +407,14 @@ class DriftTransferRepository implements TransferRepository {
 
   void _addAccountDelta(Map<int, int> deltas, int accountId, int delta) {
     deltas[accountId] = (deltas[accountId] ?? 0) + delta;
+  }
+
+  void _ensureSingleUser(Iterable<int> userIds) {
+    final uniqueUserIds = userIds.toSet();
+    if (uniqueUserIds.length > 1) {
+      throw ArgumentError(
+          'Todas as operaÃ§Ãµes devem pertencer ao mesmo usuÃ¡rio.');
+    }
   }
 }
 

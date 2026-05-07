@@ -10,8 +10,11 @@ import '../../core/database/app_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/account_preview.dart';
 import '../../data/models/create_account_request.dart';
+import '../../data/models/create_transaction_request.dart';
 import '../../data/models/update_account_request.dart';
 import '../../data/repositories/account_repository.dart';
+import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/credit_card_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../data/repositories/transfer_repository.dart';
 
@@ -19,7 +22,13 @@ class AccountsState {
   const AccountsState({
     required this.accounts,
     required this.currencyCode,
+    required this.selectedMonth,
+    required this.firstAvailableMonth,
     this.totalBalanceCents = 0,
+    this.totalInitialBalanceCents = 0,
+    this.totalIncomeCents = 0,
+    this.totalExpenseCents = 0,
+    this.totalYieldCents = 0,
     this.monthlyExpenseAverageCents = 0,
     this.suggestedEmergencyReserveCents = 0,
     this.isBalanceVisible = true,
@@ -29,7 +38,13 @@ class AccountsState {
 
   final List<AccountPreview> accounts;
   final String currencyCode;
+  final DateTime selectedMonth;
+  final DateTime firstAvailableMonth;
   final int totalBalanceCents;
+  final int totalInitialBalanceCents;
+  final int totalIncomeCents;
+  final int totalExpenseCents;
+  final int totalYieldCents;
   final int monthlyExpenseAverageCents;
   final int suggestedEmergencyReserveCents;
   final bool isBalanceVisible;
@@ -76,10 +91,20 @@ class AccountsState {
     return suggestedEmergencyReserveCents > 0 && monthlyExpenseAverageCents > 0;
   }
 
+  bool get canGoToPreviousMonth {
+    return _isAfterMonth(selectedMonth, firstAvailableMonth);
+  }
+
   AccountsState copyWith({
     List<AccountPreview>? accounts,
     String? currencyCode,
+    DateTime? selectedMonth,
+    DateTime? firstAvailableMonth,
     int? totalBalanceCents,
+    int? totalInitialBalanceCents,
+    int? totalIncomeCents,
+    int? totalExpenseCents,
+    int? totalYieldCents,
     int? monthlyExpenseAverageCents,
     int? suggestedEmergencyReserveCents,
     bool? isBalanceVisible,
@@ -90,7 +115,14 @@ class AccountsState {
     return AccountsState(
       accounts: accounts ?? this.accounts,
       currencyCode: currencyCode ?? this.currencyCode,
+      selectedMonth: selectedMonth ?? this.selectedMonth,
+      firstAvailableMonth: firstAvailableMonth ?? this.firstAvailableMonth,
       totalBalanceCents: totalBalanceCents ?? this.totalBalanceCents,
+      totalInitialBalanceCents:
+          totalInitialBalanceCents ?? this.totalInitialBalanceCents,
+      totalIncomeCents: totalIncomeCents ?? this.totalIncomeCents,
+      totalExpenseCents: totalExpenseCents ?? this.totalExpenseCents,
+      totalYieldCents: totalYieldCents ?? this.totalYieldCents,
       monthlyExpenseAverageCents:
           monthlyExpenseAverageCents ?? this.monthlyExpenseAverageCents,
       suggestedEmergencyReserveCents:
@@ -105,12 +137,16 @@ class AccountsState {
 class AccountsViewModel extends StateNotifier<AccountsState> {
   AccountsViewModel({
     required AccountRepository accountRepository,
+    required CategoryRepository categoryRepository,
+    required CreditCardRepository creditCardRepository,
     required TransactionRepository transactionRepository,
     required TransferRepository transferRepository,
     required ExchangeRateService exchangeRateService,
     required String currencyCode,
     required int? userId,
   })  : _accountRepository = accountRepository,
+        _categoryRepository = categoryRepository,
+        _creditCardRepository = creditCardRepository,
         _transactionRepository = transactionRepository,
         _transferRepository = transferRepository,
         _exchangeRateService = exchangeRateService,
@@ -119,14 +155,19 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
         super(AccountsState(
           accounts: const [],
           currencyCode: currencyCode,
+          selectedMonth: _monthOnly(DateTime.now()),
+          firstAvailableMonth: _monthOnly(DateTime.now()),
           isLoading: true,
         )) {
     _watchAccounts();
     _watchTransactions();
     _watchTransfers();
+    _watchInvoices();
   }
 
   final AccountRepository _accountRepository;
+  final CategoryRepository _categoryRepository;
+  final CreditCardRepository _creditCardRepository;
   final TransactionRepository _transactionRepository;
   final TransferRepository _transferRepository;
   final ExchangeRateService _exchangeRateService;
@@ -135,12 +176,51 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
   StreamSubscription<List<Account>>? _accountsSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
   StreamSubscription<List<AccountTransfer>>? _transfersSubscription;
+  StreamSubscription<List<CreditCardInvoice>>? _invoicesSubscription;
   List<AccountPreview> _accounts = [];
   List<FinanceTransaction> _transactions = [];
   List<AccountTransfer> _transfers = [];
+  List<CreditCardInvoice> _invoices = [];
+
+  static const _yieldPaymentMethod = 'account_yield';
+  static const _yieldCategoryName = 'Rendimentos';
 
   void toggleBalanceVisibility() {
     state = state.copyWith(isBalanceVisible: !state.isBalanceVisible);
+  }
+
+  void selectMonth(DateTime month) {
+    final selectedMonth = _maxMonth(
+      _monthOnly(month),
+      state.firstAvailableMonth,
+    );
+    if (selectedMonth.year == state.selectedMonth.year &&
+        selectedMonth.month == state.selectedMonth.month) {
+      return;
+    }
+
+    state = state.copyWith(
+      selectedMonth: selectedMonth,
+      isLoading: true,
+      clearError: true,
+    );
+    _publishState(isLoading: false, clearError: true);
+  }
+
+  void previousMonth() {
+    if (!state.canGoToPreviousMonth) {
+      return;
+    }
+
+    selectMonth(
+      DateTime(state.selectedMonth.year, state.selectedMonth.month - 1),
+    );
+  }
+
+  void nextMonth() {
+    selectMonth(
+      DateTime(state.selectedMonth.year, state.selectedMonth.month + 1),
+    );
   }
 
   Future<void> createAccount({
@@ -195,14 +275,14 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
 
     try {
       final effectiveCurrencyCode = currencyCode ?? account.currencyCode;
+      final hasLinkedEntries = _hasLinkedEntries(account.id);
       if (effectiveCurrencyCode.toUpperCase() !=
           account.currencyCode.toUpperCase()) {
-        throw StateError('A moeda da conta nÃ£o pode ser alterada.');
+        throw StateError('A moeda da conta não pode ser alterada.');
       }
-      if (_hasLinkedEntries(account.id) &&
-          balanceCents != account.balanceCents) {
+      if (hasLinkedEntries && balanceCents != account.initialBalanceCents) {
         throw StateError(
-          'Esta conta jÃ¡ possui lanÃ§amentos. Para ajustar o saldo, registre uma receita, despesa ou transferÃªncia.',
+          'Esta conta já possui lançamentos. Para ajustar o saldo, registre uma receita, despesa ou transferência.',
         );
       }
 
@@ -213,10 +293,14 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           name: name,
           type: type,
           bankName: bankName,
-          initialBalance: balanceCents,
-          currentBalance: balanceCents,
+          initialBalance:
+              hasLinkedEntries ? account.initialBalanceCents : balanceCents,
+          currentBalance:
+              hasLinkedEntries ? account.currentBalanceCents : balanceCents,
           currencyCode: effectiveCurrencyCode,
           emergencyReserveTarget: emergencyReserveTarget,
+          goalLinkedAccountId: account.goalLinkedAccountId,
+          goalTargetDate: account.goalTargetDate,
           includeInTotalBalance:
               includeInTotalBalance ?? account.includeInTotalBalance,
           color: color,
@@ -238,7 +322,7 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     try {
       if (_hasLinkedEntries(account.id)) {
         throw StateError(
-          'Esta conta possui lanÃ§amentos ou transferÃªncias vinculados. Remova ou mova esses registros antes de excluir a conta.',
+          'Esta conta possui lançamentos ou transferências vinculados. Remova ou mova esses registros antes de excluir a conta.',
         );
       }
 
@@ -255,9 +339,53 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     }
   }
 
+  Future<void> registerAccountYield({
+    required AccountPreview account,
+    required int amountCents,
+    required DateTime date,
+    String? description,
+  }) async {
+    final userId = _requireUserId();
+    if (amountCents <= 0) {
+      throw ArgumentError('O rendimento deve ser maior que zero.');
+    }
+
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final categoryId = await _ensureYieldCategory(userId);
+      await _transactionRepository.createTransaction(
+        CreateTransactionRequest(
+          userId: userId,
+          accountId: account.id,
+          categoryId: categoryId,
+          type: 'income',
+          description: description?.trim().isNotEmpty == true
+              ? description!.trim()
+              : 'Rendimento ${account.name}',
+          amountCents: amountCents,
+          date: date,
+          dueDate: date,
+          paymentMethod: _yieldPaymentMethod,
+          isPaid: true,
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
   void _watchAccounts() {
     if (_userId == null) {
-      state = AccountsState(accounts: const [], currencyCode: _currencyCode);
+      state = AccountsState(
+        accounts: const [],
+        currencyCode: _currencyCode,
+        selectedMonth: state.selectedMonth,
+        firstAvailableMonth: state.firstAvailableMonth,
+      );
       return;
     }
 
@@ -316,14 +444,71 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     );
   }
 
+  void _watchInvoices() {
+    final userId = _userId;
+    if (userId == null) {
+      return;
+    }
+
+    _invoicesSubscription = _creditCardRepository.watchInvoices(userId).listen(
+      (invoices) {
+        _invoices = invoices;
+        _publishState(isLoading: false, clearError: true);
+      },
+      onError: (Object error) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: error.toString(),
+        );
+      },
+    );
+  }
+
   Future<void> _publishState({
     bool? isLoading,
     bool clearError = false,
   }) async {
-    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    if (!mounted) {
+      return;
+    }
+
+    final Map<String, double> ratesToBrl;
+    try {
+      ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: error.toString(),
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final firstAvailableMonth = _firstAvailableMonthForAccounts();
+    final selectedMonth = _maxMonth(state.selectedMonth, firstAvailableMonth);
+    final useProjectedMonth = _shouldUseProjectedMonth(selectedMonth);
+    final statsByAccount = _calculateMonthStats(
+      selectedMonth,
+      includeExpected: useProjectedMonth,
+    );
     final accounts = [
       for (final account in _accounts)
-        _withConsolidatedBalance(account, ratesToBrl),
+        _withConsolidatedBalance(
+          account,
+          ratesToBrl,
+          statsByAccount[account.id] ?? _AccountMonthStats.empty,
+          balanceCents: useProjectedMonth
+              ? _projectedBalanceForMonth(account, selectedMonth)
+              : _balanceForMonth(account, selectedMonth),
+          firstAvailableMonth: _firstAvailableMonthForAccount(account),
+        ),
     ];
     final totalBalanceCents = accounts.fold<int>(
       0,
@@ -331,13 +516,45 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
           ? total + account.consolidatedBalanceCents
           : total,
     );
+    final totalInitialBalanceCents = accounts.fold<int>(
+      0,
+      (total, account) => account.includeInTotalBalance
+          ? total +
+              _convertCentsWithRates(
+                amountCents: account.initialBalanceCents,
+                fromCurrency: account.currencyCode,
+                ratesToBrl: ratesToBrl,
+              )
+          : total,
+    );
+    final totalIncomeCents = _sumStats(
+      accounts,
+      ratesToBrl,
+      (account) => account.monthlyIncomeCents,
+    );
+    final totalExpenseCents = _sumStats(
+      accounts,
+      ratesToBrl,
+      (account) => account.monthlyExpenseCents,
+    );
+    final totalYieldCents = _sumStats(
+      accounts,
+      ratesToBrl,
+      (account) => account.monthlyYieldCents,
+    );
     final monthlyExpenseAverageCents =
         _calculateMonthlyExpenseAverageCents(ratesToBrl);
 
     state = state.copyWith(
       accounts: accounts,
       currencyCode: _currencyCode,
+      selectedMonth: selectedMonth,
+      firstAvailableMonth: firstAvailableMonth,
       totalBalanceCents: totalBalanceCents,
+      totalInitialBalanceCents: totalInitialBalanceCents,
+      totalIncomeCents: totalIncomeCents,
+      totalExpenseCents: totalExpenseCents,
+      totalYieldCents: totalYieldCents,
       monthlyExpenseAverageCents: monthlyExpenseAverageCents,
       suggestedEmergencyReserveCents:
           _reserveTargetFor(monthlyExpenseAverageCents),
@@ -383,9 +600,39 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     FinanceTransaction transaction,
     Map<String, double> ratesToBrl,
   ) {
-    return _exchangeRateService.convertCentsWithRates(
+    return _convertCentsWithRates(
       amountCents: transaction.amount,
       fromCurrency: transaction.currencyCode,
+      ratesToBrl: ratesToBrl,
+    );
+  }
+
+  int _sumStats(
+    List<AccountPreview> accounts,
+    Map<String, double> ratesToBrl,
+    int Function(AccountPreview account) selector,
+  ) {
+    return accounts.fold<int>(
+      0,
+      (total, account) => account.includeInTotalBalance
+          ? total +
+              _convertCentsWithRates(
+                amountCents: selector(account),
+                fromCurrency: account.currencyCode,
+                ratesToBrl: ratesToBrl,
+              )
+          : total,
+    );
+  }
+
+  int _convertCentsWithRates({
+    required int amountCents,
+    required String fromCurrency,
+    required Map<String, double> ratesToBrl,
+  }) {
+    return _exchangeRateService.convertCentsWithRates(
+      amountCents: amountCents,
+      fromCurrency: fromCurrency,
       toCurrency: _currencyCode,
       ratesToBrl: ratesToBrl,
     );
@@ -394,25 +641,211 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
   AccountPreview _withConsolidatedBalance(
     AccountPreview account,
     Map<String, double> ratesToBrl,
-  ) {
+    _AccountMonthStats stats, {
+    required int balanceCents,
+    required DateTime firstAvailableMonth,
+  }) {
     return AccountPreview(
       id: account.id,
       name: account.name,
       type: account.type,
       bankName: account.bankName,
       lastDigits: account.lastDigits,
-      balanceCents: account.balanceCents,
+      initialBalanceCents: account.initialBalanceCents,
+      balanceCents: balanceCents,
+      currentBalanceCents: account.currentBalanceCents,
+      monthlyIncomeCents: stats.incomeCents,
+      monthlyExpenseCents: stats.expenseCents,
+      monthlyYieldCents: stats.yieldCents,
       currencyCode: account.currencyCode,
-      displayBalanceCents: _exchangeRateService.convertCentsWithRates(
-        amountCents: account.balanceCents,
+      displayBalanceCents: _convertCentsWithRates(
+        amountCents: balanceCents,
         fromCurrency: account.currencyCode,
-        toCurrency: _currencyCode,
         ratesToBrl: ratesToBrl,
       ),
       includeInTotalBalance: account.includeInTotalBalance,
       emergencyReserveTargetCents: account.emergencyReserveTargetCents,
+      goalLinkedAccountId: account.goalLinkedAccountId,
+      goalTargetDate: account.goalTargetDate,
+      createdAt: account.createdAt,
+      firstAvailableMonth: firstAvailableMonth,
       color: account.color,
       colorHex: account.colorHex,
+    );
+  }
+
+  int _balanceForMonth(AccountPreview account, DateTime month) {
+    final end = DateTime(month.year, month.month + 1);
+    var balanceCents = account.initialBalanceCents;
+
+    for (final transaction in _transactions) {
+      if (!transaction.isPaid ||
+          transaction.accountId != account.id ||
+          !transaction.date.isBefore(end) ||
+          transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      balanceCents += transaction.type == 'income'
+          ? transaction.amount
+          : -transaction.amount;
+    }
+
+    for (final transfer in _transfers) {
+      if (!transfer.isPaid || !transfer.date.isBefore(end)) {
+        continue;
+      }
+
+      if (transfer.fromAccountId == account.id) {
+        balanceCents -= transfer.amount;
+      }
+      if (transfer.toAccountId == account.id) {
+        balanceCents += transfer.convertedAmount ?? transfer.amount;
+      }
+    }
+
+    for (final invoice in _invoices) {
+      if (invoice.status != 'paid' ||
+          invoice.paymentAccountId != account.id ||
+          invoice.paidAt == null ||
+          !invoice.paidAt!.isBefore(end)) {
+        continue;
+      }
+
+      balanceCents -= invoice.amount;
+    }
+
+    return balanceCents;
+  }
+
+  bool _shouldUseProjectedMonth(DateTime month) {
+    return _isAfterMonth(_monthOnly(month), _monthOnly(DateTime.now()));
+  }
+
+  Map<int, _AccountMonthStats> _calculateMonthStats(
+    DateTime month, {
+    required bool includeExpected,
+  }) {
+    final start = _monthOnly(month);
+    final end = DateTime(start.year, start.month + 1);
+    final statsByAccount = <int, _AccountMonthStats>{};
+
+    for (final transaction in _transactions) {
+      if (transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      if (!transaction.isPaid && !includeExpected) {
+        continue;
+      }
+
+      final referenceDate = transaction.isPaid
+          ? transaction.date
+          : transaction.dueDate ?? transaction.date;
+      if (referenceDate.isBefore(start) || !referenceDate.isBefore(end)) {
+        continue;
+      }
+
+      final isYield = transaction.paymentMethod == _yieldPaymentMethod;
+      final current =
+          statsByAccount[transaction.accountId] ?? _AccountMonthStats.empty;
+      statsByAccount[transaction.accountId] = current.add(
+        incomeCents:
+            transaction.type == 'income' && !isYield ? transaction.amount : 0,
+        expenseCents: transaction.type == 'expense' ? transaction.amount : 0,
+        yieldCents:
+            transaction.type == 'income' && isYield ? transaction.amount : 0,
+      );
+    }
+
+    if (!includeExpected) {
+      return statsByAccount;
+    }
+
+    for (final invoice in _invoices) {
+      final accountId = invoice.paymentAccountId;
+      if (invoice.status == 'paid' ||
+          invoice.amount <= 0 ||
+          accountId == null ||
+          !_isWithinMonth(invoice.dueDate, month)) {
+        continue;
+      }
+
+      final current = statsByAccount[accountId] ?? _AccountMonthStats.empty;
+      statsByAccount[accountId] = current.add(
+        expenseCents: invoice.amount,
+      );
+    }
+
+    return statsByAccount;
+  }
+
+  int _projectedBalanceForMonth(AccountPreview account, DateTime month) {
+    final end = DateTime(month.year, month.month + 1);
+    var balanceCents = _balanceForMonth(account, month);
+
+    for (final transaction in _transactions) {
+      if (transaction.isPaid ||
+          transaction.accountId != account.id ||
+          transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      final referenceDate = transaction.dueDate ?? transaction.date;
+      if (!referenceDate.isBefore(end)) {
+        continue;
+      }
+
+      balanceCents += transaction.type == 'income'
+          ? transaction.amount
+          : -transaction.amount;
+    }
+
+    for (final transfer in _transfers) {
+      if (transfer.isPaid || !transfer.dueDate.isBefore(end)) {
+        continue;
+      }
+
+      if (transfer.fromAccountId == account.id) {
+        balanceCents -= transfer.amount;
+      }
+      if (transfer.toAccountId == account.id) {
+        balanceCents += transfer.convertedAmount ?? transfer.amount;
+      }
+    }
+
+    for (final invoice in _invoices) {
+      if (invoice.status == 'paid' ||
+          invoice.amount <= 0 ||
+          invoice.paymentAccountId != account.id ||
+          !invoice.dueDate.isBefore(end)) {
+        continue;
+      }
+
+      balanceCents -= invoice.amount;
+    }
+
+    return balanceCents;
+  }
+
+  Future<int> _ensureYieldCategory(int userId) async {
+    final categories = await _categoryRepository.findCategoriesByType(
+      userId: userId,
+      type: 'income',
+    );
+    final normalizedName = _yieldCategoryName.toLowerCase();
+    for (final category in categories) {
+      if (category.name.trim().toLowerCase() == normalizedName) {
+        return category.id;
+      }
+    }
+
+    return _categoryRepository.createCategory(
+      userId: userId,
+      name: _yieldCategoryName,
+      type: 'income',
+      icon: 'investment',
+      color: '#0A8F4D',
     );
   }
 
@@ -445,6 +878,65 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     return hasTransactions || hasTransfers;
   }
 
+  DateTime _firstAvailableMonthForAccounts() {
+    if (_accounts.isEmpty) {
+      return _monthOnly(DateTime.now());
+    }
+
+    var firstMonth = _firstAvailableMonthForAccount(_accounts.first);
+    for (final account in _accounts.skip(1)) {
+      firstMonth = _minMonth(
+        firstMonth,
+        _firstAvailableMonthForAccount(account),
+      );
+    }
+    return firstMonth;
+  }
+
+  DateTime _firstAvailableMonthForAccount(AccountPreview account) {
+    DateTime? firstRecordMonth = _monthOnly(
+      account.createdAt ?? DateTime.now(),
+    );
+
+    for (final transaction in _transactions) {
+      if (transaction.accountId != account.id ||
+          transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      firstRecordMonth = _minNullableMonth(
+        firstRecordMonth,
+        _monthOnly(transaction.date),
+      );
+    }
+
+    for (final transfer in _transfers) {
+      if (transfer.fromAccountId != account.id &&
+          transfer.toAccountId != account.id) {
+        continue;
+      }
+
+      firstRecordMonth = _minNullableMonth(
+        firstRecordMonth,
+        _monthOnly(transfer.date),
+      );
+    }
+
+    for (final invoice in _invoices) {
+      final paidAt = invoice.paidAt;
+      if (invoice.paymentAccountId != account.id || paidAt == null) {
+        continue;
+      }
+
+      firstRecordMonth = _minNullableMonth(
+        firstRecordMonth,
+        _monthOnly(paidAt),
+      );
+    }
+
+    return firstRecordMonth ?? _monthOnly(account.createdAt ?? DateTime.now());
+  }
+
   AccountPreview _mapAccount(Account account) {
     return AccountPreview(
       id: account.id,
@@ -452,10 +944,16 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
       type: account.type,
       bankName: account.bankName,
       lastDigits: account.id.toString().padLeft(4, '0'),
+      initialBalanceCents: account.initialBalance,
       balanceCents: account.currentBalance,
+      currentBalanceCents: account.currentBalance,
       currencyCode: account.currencyCode,
       includeInTotalBalance: account.includeInTotalBalance,
       emergencyReserveTargetCents: account.emergencyReserveTarget,
+      goalLinkedAccountId: account.goalLinkedAccountId,
+      goalTargetDate: account.goalTargetDate,
+      createdAt: account.createdAt,
+      firstAvailableMonth: _monthOnly(account.createdAt),
       color: _parseColor(account.color),
       colorHex: account.color,
     );
@@ -472,7 +970,34 @@ class AccountsViewModel extends StateNotifier<AccountsState> {
     _accountsSubscription?.cancel();
     _transactionsSubscription?.cancel();
     _transfersSubscription?.cancel();
+    _invoicesSubscription?.cancel();
     super.dispose();
+  }
+}
+
+class _AccountMonthStats {
+  const _AccountMonthStats({
+    this.incomeCents = 0,
+    this.expenseCents = 0,
+    this.yieldCents = 0,
+  });
+
+  final int incomeCents;
+  final int expenseCents;
+  final int yieldCents;
+
+  static const empty = _AccountMonthStats();
+
+  _AccountMonthStats add({
+    int incomeCents = 0,
+    int expenseCents = 0,
+    int yieldCents = 0,
+  }) {
+    return _AccountMonthStats(
+      incomeCents: this.incomeCents + incomeCents,
+      expenseCents: this.expenseCents + expenseCents,
+      yieldCents: this.yieldCents + yieldCents,
+    );
   }
 }
 
@@ -484,6 +1009,8 @@ final accountsViewModelProvider =
 
   return AccountsViewModel(
     accountRepository: ref.watch(accountRepositoryProvider),
+    categoryRepository: ref.watch(categoryRepositoryProvider),
+    creditCardRepository: ref.watch(creditCardRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
     transferRepository: ref.watch(transferRepositoryProvider),
     exchangeRateService: ref.watch(exchangeRateServiceProvider),
@@ -491,3 +1018,33 @@ final accountsViewModelProvider =
     userId: userId,
   );
 });
+
+DateTime _monthOnly(DateTime date) => DateTime(date.year, date.month);
+
+bool _isWithinMonth(DateTime date, DateTime month) {
+  final start = _monthOnly(month);
+  final end = DateTime(start.year, start.month + 1);
+  return !date.isBefore(start) && date.isBefore(end);
+}
+
+bool _isBeforeMonth(DateTime left, DateTime right) {
+  return left.year < right.year ||
+      (left.year == right.year && left.month < right.month);
+}
+
+bool _isAfterMonth(DateTime left, DateTime right) {
+  return left.year > right.year ||
+      (left.year == right.year && left.month > right.month);
+}
+
+DateTime _minMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? left : right;
+}
+
+DateTime _maxMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? right : left;
+}
+
+DateTime _minNullableMonth(DateTime? left, DateTime right) {
+  return left == null ? right : _minMonth(left, right);
+}

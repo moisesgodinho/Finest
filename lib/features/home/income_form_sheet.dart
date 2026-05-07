@@ -7,12 +7,22 @@ import '../../core/utils/currency_utils.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/subcategory_model.dart';
 import '../../data/models/transaction_name_suggestion.dart';
+import '../../shared/widgets/form_option_selector.dart';
 import '../../shared/widgets/name_prompt_dialog.dart';
 import 'income_form_view_model.dart';
 import 'transaction_suggestion_strip.dart';
 
 class IncomeFormSheet extends ConsumerStatefulWidget {
-  const IncomeFormSheet({super.key});
+  const IncomeFormSheet({
+    this.initialAccountId,
+    this.lockAccount = false,
+    this.title = 'Receita',
+    super.key,
+  });
+
+  final int? initialAccountId;
+  final bool lockAccount;
+  final String title;
 
   @override
   ConsumerState<IncomeFormSheet> createState() => _IncomeFormSheetState();
@@ -37,6 +47,7 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
   @override
   void initState() {
     super.initState();
+    _selectedAccountId = widget.initialAccountId;
     _nameController.addListener(_handleNameChanged);
     final now = DateTime.now();
     _dueDate = now;
@@ -95,7 +106,7 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Receita',
+                      widget.title,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
@@ -160,22 +171,21 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
                   },
                 ),
                 const SizedBox(height: 16),
-                Text('Tipo', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+                FormOptionSelector<_IncomeKind>(
+                  title: 'Tipo',
+                  value: _incomeKind,
+                  options: [
                     for (final kind in _IncomeKind.values)
-                      ChoiceChip(
-                        selected: _incomeKind == kind,
-                        label: Text(kind.label),
-                        avatar: Icon(kind.icon, size: 18),
-                        onSelected: (_) {
-                          setState(() => _incomeKind = kind);
-                        },
+                      FormOption(
+                        value: kind,
+                        label: kind.label,
+                        icon: kind.icon,
+                        description: kind.description,
                       ),
                   ],
+                  onChanged: (kind) {
+                    setState(() => _incomeKind = kind);
+                  },
                 ),
                 if (_incomeKind == _IncomeKind.installment) ...[
                   const SizedBox(height: 14),
@@ -284,9 +294,11 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
                         ),
                       ),
                   ],
-                  onChanged: (value) {
-                    setState(() => _selectedAccountId = value);
-                  },
+                  onChanged: widget.lockAccount
+                      ? null
+                      : (value) {
+                          setState(() => _selectedAccountId = value);
+                        },
                 ),
                 const SizedBox(height: 14),
                 InkWell(
@@ -332,6 +344,18 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
   }
 
   void _syncSelections(IncomeFormState state) {
+    final initialAccountId = widget.initialAccountId;
+    if (initialAccountId != null &&
+        state.accounts.any((account) => account.id == initialAccountId) &&
+        (widget.lockAccount || _selectedAccountId == null)) {
+      _selectedAccountId = initialAccountId;
+    }
+    if (widget.lockAccount &&
+        _selectedAccountId != null &&
+        !state.accounts.any((account) => account.id == _selectedAccountId)) {
+      _selectedAccountId = null;
+    }
+
     final pendingCategoryId = _pendingCategoryId;
     if (pendingCategoryId != null &&
         state.categories.any((category) => category.id == pendingCategoryId)) {
@@ -340,7 +364,8 @@ class _IncomeFormSheetState extends ConsumerState<IncomeFormSheet> {
       _pendingCategoryId = null;
     }
 
-    if (state.accounts.isNotEmpty &&
+    if (!widget.lockAccount &&
+        state.accounts.isNotEmpty &&
         !state.accounts.any((account) => account.id == _selectedAccountId)) {
       _selectedAccountId = state.accounts.first.id;
     }
@@ -658,13 +683,29 @@ class _MissingRequirement extends StatelessWidget {
 }
 
 enum _IncomeKind {
-  single('single', 'Única', Icons.looks_one_rounded),
-  fixedMonthly('fixed_monthly', 'Fixa mensal', Icons.event_repeat_rounded),
-  installment('installment', 'Parcelada', Icons.view_week_rounded);
+  single(
+    'single',
+    'Única',
+    'Recebimento avulso em uma conta.',
+    Icons.looks_one_rounded,
+  ),
+  fixedMonthly(
+    'fixed_monthly',
+    'Fixa mensal',
+    'Repete todo mês como renda fixa.',
+    Icons.event_repeat_rounded,
+  ),
+  installment(
+    'installment',
+    'Parcelada',
+    'Recebe o valor em parcelas mensais.',
+    Icons.view_week_rounded,
+  );
 
-  const _IncomeKind(this.value, this.label, this.icon);
+  const _IncomeKind(this.value, this.label, this.description, this.icon);
 
   final String value;
   final String label;
+  final String description;
   final IconData icon;
 }

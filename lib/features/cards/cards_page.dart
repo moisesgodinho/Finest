@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
@@ -11,6 +12,8 @@ import '../../data/models/account_preview.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/credit_card_invoice_preview.dart';
 import '../../data/models/credit_card_preview.dart';
+import '../../shared/constants/financial_color_options.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
 import '../../shared/widgets/section_card.dart';
 import 'cards_view_model.dart';
 import 'credit_card_invoice_page.dart';
@@ -35,12 +38,13 @@ class _CardsPageState extends ConsumerState<CardsPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(cardsViewModelProvider);
+    final visibleMonth = _maxMonth(_visibleMonth, state.firstAvailableMonth);
     final visibleInvoices = [
       for (final card in state.cards)
         state.invoiceForCardMonth(
           card,
-          month: _visibleMonth.month,
-          year: _visibleMonth.year,
+          month: visibleMonth.month,
+          year: visibleMonth.year,
         ),
     ];
     final invoicesByCardId = {
@@ -70,9 +74,6 @@ class _CardsPageState extends ConsumerState<CardsPage> {
             (card.displayLimitCents - invoiceAmount).clamp(0, 1 << 31).toInt();
       },
     );
-    final unpaidInvoicesCount = visibleInvoices
-        .where((invoice) => !invoice.isPaid && invoice.amountCents > 0)
-        .length;
     final categorySpending = _buildCategorySpending(
       visiblePurchases.map((purchase) => purchase.transaction),
       expenseCategoriesById,
@@ -102,14 +103,22 @@ class _CardsPageState extends ConsumerState<CardsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CardsHeader(
-              onAdd: () => _openCardForm(context, ref),
-            ),
+            const _CardsHeader(),
             const SizedBox(height: 14),
             _CardsMonthPager(
-              month: _visibleMonth,
-              onPrevious: () => _moveMonth(-1),
-              onNext: () => _moveMonth(1),
+              month: visibleMonth,
+              canGoPrevious: _isAfterMonth(
+                visibleMonth,
+                state.firstAvailableMonth,
+              ),
+              onPrevious: () => _moveMonth(
+                -1,
+                firstAvailableMonth: state.firstAvailableMonth,
+              ),
+              onNext: () => _moveMonth(
+                1,
+                firstAvailableMonth: state.firstAvailableMonth,
+              ),
             ),
             if (state.isLoading) ...[
               const SizedBox(height: 14),
@@ -142,33 +151,22 @@ class _CardsPageState extends ConsumerState<CardsPage> {
                 ),
                 onDeleteCard: (card) => _confirmDeleteCard(context, ref, card),
               ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _CardsMetric(
-                  title: 'Total em faturas',
-                  value: CurrencyUtils.formatCents(
-                    totalInvoicesCents,
-                    currencyCode: state.currencyCode,
-                  ),
-                  icon: Icons.receipt_long_rounded,
+            if (state.cards.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.center,
+                child: TextButton.icon(
+                  onPressed: () => _openCardForm(context, ref),
+                  icon: const Icon(Icons.add_card_rounded, size: 18),
+                  label: const Text('Adicionar cartão'),
                 ),
-                _CardsMetric(
-                  title: 'Limite disponível',
-                  value: CurrencyUtils.formatCents(
-                    availableLimitCents,
-                    currencyCode: state.currencyCode,
-                  ),
-                  icon: Icons.account_balance_wallet_rounded,
-                ),
-                _CardsMetric(
-                  title: 'Próximos vencimentos',
-                  value: '$unpaidInvoicesCount faturas',
-                  icon: Icons.calendar_month_rounded,
-                ),
-              ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            _CardsMetricsRow(
+              totalInvoicesCents: totalInvoicesCents,
+              availableLimitCents: availableLimitCents,
+              currencyCode: state.currencyCode,
             ),
             const SizedBox(height: 18),
             SectionCard(
@@ -204,9 +202,16 @@ class _CardsPageState extends ConsumerState<CardsPage> {
     );
   }
 
-  void _moveMonth(int delta) {
+  void _moveMonth(
+    int delta, {
+    required DateTime firstAvailableMonth,
+  }) {
     setState(() {
-      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + delta);
+      final currentMonth = _maxMonth(_visibleMonth, firstAvailableMonth);
+      _visibleMonth = _maxMonth(
+        DateTime(currentMonth.year, currentMonth.month + delta),
+        firstAvailableMonth,
+      );
     });
   }
 
@@ -512,11 +517,7 @@ class _CardsPageState extends ConsumerState<CardsPage> {
 }
 
 class _CardsHeader extends StatelessWidget {
-  const _CardsHeader({
-    required this.onAdd,
-  });
-
-  final VoidCallback onAdd;
+  const _CardsHeader();
 
   @override
   Widget build(BuildContext context) {
@@ -531,11 +532,6 @@ class _CardsHeader extends StatelessWidget {
             ],
           ),
         ),
-        FilledButton.icon(
-          onPressed: onAdd,
-          icon: const Icon(Icons.add_card_rounded),
-          label: const Text('Adicionar'),
-        ),
       ],
     );
   }
@@ -544,11 +540,13 @@ class _CardsHeader extends StatelessWidget {
 class _CardsMonthPager extends StatelessWidget {
   const _CardsMonthPager({
     required this.month,
+    required this.canGoPrevious,
     required this.onPrevious,
     required this.onNext,
   });
 
   final DateTime month;
+  final bool canGoPrevious;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
@@ -566,7 +564,7 @@ class _CardsMonthPager extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            onPressed: onPrevious,
+            onPressed: canGoPrevious ? onPrevious : null,
             tooltip: 'Mês anterior',
             icon: const Icon(Icons.chevron_left_rounded),
           ),
@@ -1171,6 +1169,47 @@ Color _shiftColor(Color color, {required double lightnessDelta}) {
       .toColor();
 }
 
+class _CardsMetricsRow extends StatelessWidget {
+  const _CardsMetricsRow({
+    required this.totalInvoicesCents,
+    required this.availableLimitCents,
+    required this.currencyCode,
+  });
+
+  final int totalInvoicesCents;
+  final int availableLimitCents;
+  final String currencyCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _CardsMetric(
+            title: 'Total em faturas',
+            value: CurrencyUtils.formatCents(
+              totalInvoicesCents,
+              currencyCode: currencyCode,
+            ),
+            icon: Icons.receipt_long_rounded,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _CardsMetric(
+            title: 'Limite disponível',
+            value: CurrencyUtils.formatCents(
+              availableLimitCents,
+              currencyCode: currencyCode,
+            ),
+            icon: Icons.account_balance_wallet_rounded,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CardsMetric extends StatelessWidget {
   const _CardsMetric({
     required this.title,
@@ -1187,8 +1226,8 @@ class _CardsMetric extends StatelessWidget {
     final colors = context.colors;
 
     return Container(
-      width: 162,
-      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(minHeight: 92),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -1203,9 +1242,10 @@ class _CardsMetric extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
+            radius: 19,
             backgroundColor: colors.accentSoft,
             foregroundColor: colors.primary,
-            child: Icon(icon),
+            child: Icon(icon, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1591,47 +1631,53 @@ class _CardsInvoicePurchaseTile extends StatelessWidget {
         ? '${transaction.entryKindLabel} - $categoryLabel - ${purchase.invoice.cardName}'
         : '$categoryLabel$installment - ${purchase.invoice.cardName}';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          _CardsCategoryIconBadge(icon: categoryIcon, color: categoryColor),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  transaction.description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  displayDetail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          _TransactionAmountDate(
-            amount: transaction.isCredit
-                ? '+ ${CurrencyUtils.formatCents(
-                    transaction.amountCents,
-                    currencyCode: transaction.currencyCode,
-                  )}'
-                : CurrencyUtils.formatCents(
-                    transaction.amountCents,
-                    currencyCode: transaction.currencyCode,
+    return InkWell(
+      onTap: () => context.push(
+        cardTransactionDetailsPath(transaction.id),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            _CardsCategoryIconBadge(icon: categoryIcon, color: categoryColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
-            date: _formatDate(transaction.date),
-            amountColor: transaction.isCredit ? colors.success : null,
-          ),
-        ],
+                  const SizedBox(height: 2),
+                  Text(
+                    displayDetail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _TransactionAmountDate(
+              amount: transaction.isCredit
+                  ? '+ ${CurrencyUtils.formatCents(
+                      transaction.amountCents,
+                      currencyCode: transaction.currencyCode,
+                    )}'
+                  : CurrencyUtils.formatCents(
+                      transaction.amountCents,
+                      currencyCode: transaction.currencyCode,
+                    ),
+              date: _formatDate(transaction.date),
+              amountColor: transaction.isCredit ? colors.success : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1697,7 +1743,7 @@ class _CardActionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<_CardAction>(
+    return AppPopupMenuButton<_CardAction>(
       tooltip: 'Ações do cartão',
       icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
       onSelected: (action) {
@@ -1714,15 +1760,25 @@ class _CardActionsMenu extends StatelessWidget {
         return const [
           PopupMenuItem(
             value: _CardAction.edit,
-            child: Text('Editar'),
+            child: AppPopupMenuItem(
+              icon: Icons.edit_rounded,
+              label: 'Editar',
+            ),
           ),
           PopupMenuItem(
             value: _CardAction.pay,
-            child: Text('Pagar fatura'),
+            child: AppPopupMenuItem(
+              icon: Icons.check_circle_rounded,
+              label: 'Pagar fatura',
+            ),
           ),
           PopupMenuItem(
             value: _CardAction.delete,
-            child: Text('Remover'),
+            child: AppPopupMenuItem(
+              icon: Icons.delete_outline_rounded,
+              label: 'Remover',
+              isDestructive: true,
+            ),
           ),
         ];
       },
@@ -1775,14 +1831,6 @@ class _CreditCardFormSheetState extends State<_CreditCardFormSheet> {
     _BrandOption('other', 'Outra'),
   ];
 
-  static const _colors = [
-    '#006B4F',
-    '#2F80ED',
-    '#7C3AED',
-    '#F59E0B',
-    '#D93025',
-  ];
-
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _bankNameController;
@@ -1825,7 +1873,8 @@ class _CreditCardFormSheetState extends State<_CreditCardFormSheet> {
     _selectedBrand = _brands.any((brand) => brand.value == card?.brand)
         ? card!.brand
         : _brands.first.value;
-    _selectedColor = card?.colorHex ?? _colors.first;
+    _selectedColor =
+        card?.colorHex ?? FinancialColorOptions.accountAndCard.first;
     _defaultPaymentAccountId = _initialAccountId(card);
     _closingDay = card?.closingDay ?? 5;
     _dueDay = card?.dueDay ?? 15;
@@ -2040,8 +2089,9 @@ class _CreditCardFormSheetState extends State<_CreditCardFormSheet> {
               const SizedBox(height: 10),
               Wrap(
                 spacing: 10,
+                runSpacing: 10,
                 children: [
-                  for (final color in _colors)
+                  for (final color in FinancialColorOptions.accountAndCard)
                     _ColorOption(
                       color: color,
                       isSelected: color == _selectedColor,
@@ -2182,6 +2232,8 @@ class _ColorOption extends StatelessWidget {
     final parsedColor = Color(
       int.parse('FF${color.replaceFirst('#', '')}', radix: 16),
     );
+    final checkColor =
+        parsedColor.computeLuminance() > 0.55 ? Colors.black : Colors.white;
 
     return InkWell(
       onTap: onTap,
@@ -2197,10 +2249,22 @@ class _ColorOption extends StatelessWidget {
             width: 3,
           ),
         ),
-        child: isSelected
-            ? const Icon(Icons.check_rounded, color: Colors.white)
-            : null,
+        child: isSelected ? Icon(Icons.check_rounded, color: checkColor) : null,
       ),
     );
   }
+}
+
+bool _isBeforeMonth(DateTime left, DateTime right) {
+  return left.year < right.year ||
+      (left.year == right.year && left.month < right.month);
+}
+
+bool _isAfterMonth(DateTime left, DateTime right) {
+  return left.year > right.year ||
+      (left.year == right.year && left.month > right.month);
+}
+
+DateTime _maxMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? right : left;
 }

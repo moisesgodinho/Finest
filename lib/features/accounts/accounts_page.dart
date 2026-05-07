@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/currency/app_currency.dart';
 import '../../core/currency/currency_controller.dart';
@@ -7,7 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/currency_utils.dart';
 import '../../core/utils/date_utils.dart';
 import '../../data/models/account_preview.dart';
-import '../../shared/widgets/balance_card.dart';
+import '../../shared/constants/financial_color_options.dart';
 import '../../shared/widgets/section_card.dart';
 import '../transactions/transactions_view_model.dart';
 import 'accounts_view_model.dart';
@@ -47,68 +48,61 @@ class AccountsPage extends ConsumerWidget {
           children: [
             _PageHeader(
               title: 'Contas',
-              subtitle: AppDateUtils.monthYearLabel(DateTime.now()),
-              onAdd: () => _openAccountForm(context, ref),
+            ),
+            const SizedBox(height: 14),
+            _AccountsMonthPager(
+              month: state.selectedMonth,
+              canGoPrevious: state.canGoToPreviousMonth,
+              onPrevious: viewModel.previousMonth,
+              onNext: viewModel.nextMonth,
             ),
             if (state.isLoading) ...[
               const SizedBox(height: 14),
               const LinearProgressIndicator(minHeight: 3),
             ],
             const SizedBox(height: 20),
-            BalanceCard(
-              title: 'Saldo total em contas',
-              value: CurrencyUtils.formatCents(
-                state.totalBalanceCents,
-                currencyCode: state.currencyCode,
-              ),
-              subtitle: '${state.accounts.length} contas vinculadas',
+            _AccountsTotalCard(
+              state: state,
               isVisible: state.isBalanceVisible,
               onToggleVisibility: viewModel.toggleBalanceVisibility,
             ),
             const SizedBox(height: 18),
-            SectionCard(
-              title: 'Minhas contas',
-              trailing: TextButton.icon(
-                onPressed: () => _openAccountForm(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Adicionar'),
-              ),
-              child: state.accounts.isEmpty
-                  ? const _EmptyAccounts()
-                  : Column(
-                      children: [
-                        for (final account in state.accounts)
-                          _AccountTile(
-                            account: account,
-                            displayCurrencyCode: state.currencyCode,
-                            onTap: () => _openAccountDetails(
-                              context,
-                              ref,
-                              account,
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
-            const SizedBox(height: 18),
-            _EmergencyReserveCard(
-              state: state,
-              onCreate: () => _openAccountForm(
+            _AccountsSection(
+              accounts: state.accounts,
+              displayCurrencyCode: state.currencyCode,
+              onAdd: () => _openAccountForm(context, ref),
+              onTapAccount: (account) => _openAccountDetails(
                 context,
                 ref,
-                isEmergencyReserve: true,
-                initialName: 'Reserva de emergência',
-                initialType: 'Conta digital',
-                suggestedReserveCents: state.suggestedEmergencyReserveCents,
+                account,
               ),
-              onEdit: (account) => _openAccountForm(
+              onRegisterYield: (account) => _openAccountYieldForm(
                 context,
                 ref,
-                account: account,
-                isEmergencyReserve: true,
-                suggestedReserveCents: state.suggestedEmergencyReserveCents,
+                account,
               ),
             ),
+            if (state.emergencyReserveAccount == null) ...[
+              const SizedBox(height: 18),
+              _EmergencyReserveCard(
+                state: state,
+                onCreate: () => _openAccountForm(
+                  context,
+                  ref,
+                  isEmergencyReserve: true,
+                  initialName: 'Reserva de emergência',
+                  initialType: 'Conta digital',
+                  suggestedReserveCents: state.suggestedEmergencyReserveCents,
+                ),
+                onEdit: (account) => _openAccountForm(
+                  context,
+                  ref,
+                  account: account,
+                  isEmergencyReserve: true,
+                  suggestedReserveCents: state.suggestedEmergencyReserveCents,
+                ),
+              ),
+            ],
             if (state.accounts.isNotEmpty) ...[
               const SizedBox(height: 18),
               SectionCard(
@@ -135,35 +129,7 @@ class AccountsPage extends ConsumerWidget {
     WidgetRef ref,
     AccountPreview account,
   ) async {
-    final shouldEdit = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: context.colors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) {
-        final accountsState = ref.read(accountsViewModelProvider);
-        final currentAccount = accountsState.accounts
-            .where((item) => item.id == account.id)
-            .firstOrNull;
-        final detailAccount = currentAccount ?? account;
-        final transactionsState = ref.read(transactionsViewModelProvider);
-
-        return _AccountDetailSheet(
-          account: detailAccount,
-          displayCurrencyCode: accountsState.currencyCode,
-          history: _accountHistoryFor(
-            transactionsState.transactions,
-            detailAccount.id,
-          ),
-          onEdit: () {
-            Navigator.of(sheetContext).pop(true);
-          },
-        );
-      },
-    );
+    final shouldEdit = await context.push<bool>('/accounts/${account.id}');
 
     if (shouldEdit != true || !context.mounted) {
       return;
@@ -181,20 +147,28 @@ class AccountsPage extends ConsumerWidget {
     );
   }
 
-  List<TransactionListItem> _accountHistoryFor(
+  static List<TransactionListItem> _accountHistoryFor(
     List<TransactionListItem> transactions,
-    int accountId,
-  ) {
+    int accountId, {
+    DateTime? month,
+  }) {
     final history = transactions.where((transaction) {
       if (transaction.isTransfer) {
-        return transaction.fromAccountId == accountId ||
+        final belongsToAccount = transaction.fromAccountId == accountId ||
             transaction.toAccountId == accountId;
+        return belongsToAccount &&
+            (month == null || _isSameMonth(transaction.monthReference, month));
       }
-      return transaction.accountId == accountId;
+      return transaction.accountId == accountId &&
+          (month == null || _isSameMonth(transaction.monthReference, month));
     }).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
 
     return history.take(25).toList();
+  }
+
+  static bool _isSameMonth(DateTime left, DateTime right) {
+    return left.year == right.year && left.month == right.month;
   }
 
   Future<void> _openAccountForm(
@@ -277,18 +251,61 @@ class AccountsPage extends ConsumerWidget {
       );
     }
   }
+
+  static Future<void> _openAccountYieldForm(
+    BuildContext context,
+    WidgetRef ref,
+    AccountPreview account,
+  ) async {
+    final viewModel = ref.read(accountsViewModelProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        final currentAccount = ref
+                .read(accountsViewModelProvider)
+                .accounts
+                .where((item) => item.id == account.id)
+                .firstOrNull ??
+            account;
+
+        return _AccountYieldFormSheet(
+          account: currentAccount,
+          onSubmit: ({
+            required int amountCents,
+            required DateTime date,
+          }) async {
+            await viewModel.registerAccountYield(
+              account: currentAccount,
+              amountCents: amountCents,
+              date: date,
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Rendimento registrado.')),
+      );
+    }
+  }
 }
 
 class _PageHeader extends StatelessWidget {
   const _PageHeader({
     required this.title,
-    required this.subtitle,
-    required this.onAdd,
   });
 
   final String title;
-  final String subtitle;
-  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -299,19 +316,368 @@ class _PageHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 4),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
-        ),
-        IconButton.filled(
-          onPressed: onAdd,
-          tooltip: 'Adicionar conta',
-          icon: const Icon(Icons.add_rounded),
         ),
       ],
     );
   }
+}
+
+class _AccountsMonthPager extends StatelessWidget {
+  const _AccountsMonthPager({
+    required this.month,
+    required this.canGoPrevious,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final DateTime month;
+  final bool canGoPrevious;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: canGoPrevious ? onPrevious : null,
+            tooltip: 'Mês anterior',
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Text(
+              AppDateUtils.monthYearLabel(month),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            onPressed: onNext,
+            tooltip: 'Próximo mês',
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountsTotalCard extends StatelessWidget {
+  const _AccountsTotalCard({
+    required this.state,
+    required this.isVisible,
+    required this.onToggleVisibility,
+  });
+
+  final AccountsState state;
+  final bool isVisible;
+  final VoidCallback onToggleVisibility;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final gradientStart = _shiftColor(colors.primary, lightnessDelta: 0.12);
+    final gradientEnd = _shiftColor(colors.primaryDark, lightnessDelta: -0.03);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [gradientStart, gradientEnd],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.primaryDark.withValues(
+              alpha: colors.isDark ? 0.36 : 0.22,
+            ),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Stack(
+          children: [
+            Positioned(
+              left: -86,
+              bottom: -100,
+              child: _AccountsTotalGlow(size: 240, opacity: 0.12),
+            ),
+            Positioned(
+              right: -96,
+              top: -104,
+              child: _AccountsTotalGlow(size: 230, opacity: 0.10),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Saldo total em contas',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _AccountsVisibilityButton(
+                        isVisible: isVisible,
+                        onPressed: onToggleVisibility,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  FittedBox(
+                    alignment: Alignment.centerLeft,
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isVisible
+                          ? CurrencyUtils.formatCents(
+                              state.totalBalanceCents,
+                              currencyCode: state.currencyCode,
+                            )
+                          : '${state.currencyCode} ------',
+                      maxLines: 1,
+                      style:
+                          Theme.of(context).textTheme.headlineLarge?.copyWith(
+                                color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _AccountsTotalMetricGrid(
+                    isVisible: isVisible,
+                    currencyCode: state.currencyCode,
+                    metrics: [
+                      _AccountsMetricData(
+                        label: 'Saldo inicial',
+                        amountCents: state.totalInitialBalanceCents,
+                      ),
+                      _AccountsMetricData(
+                        label: 'Receitas',
+                        amountCents: state.totalIncomeCents,
+                      ),
+                      _AccountsMetricData(
+                        label: 'Despesas',
+                        amountCents: state.totalExpenseCents,
+                      ),
+                      _AccountsMetricData(
+                        label: 'Rendimentos',
+                        amountCents: state.totalYieldCents,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '${state.accounts.length} contas vinculadas',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountsTotalMetricGrid extends StatelessWidget {
+  const _AccountsTotalMetricGrid({
+    required this.metrics,
+    required this.currencyCode,
+    required this.isVisible,
+  });
+
+  final List<_AccountsMetricData> metrics;
+  final String currencyCode;
+  final bool isVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 520;
+        final width = isWide
+            ? ((constraints.maxWidth - 24) / 4)
+            : ((constraints.maxWidth - 8) / 2);
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final metric in metrics)
+              SizedBox(
+                width: width.toDouble(),
+                child: _AccountsTotalMetric(
+                  metric: metric,
+                  currencyCode: currencyCode,
+                  isVisible: isVisible,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AccountsTotalMetric extends StatelessWidget {
+  const _AccountsTotalMetric({
+    required this.metric,
+    required this.currencyCode,
+    required this.isVisible,
+  });
+
+  final _AccountsMetricData metric;
+  final String currencyCode;
+  final bool isVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              metric.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                isVisible
+                    ? CurrencyUtils.formatCents(
+                        metric.amountCents,
+                        currencyCode: currencyCode,
+                      )
+                    : '$currencyCode --',
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountsMetricData {
+  const _AccountsMetricData({
+    required this.label,
+    required this.amountCents,
+  });
+
+  final String label;
+  final int amountCents;
+}
+
+class _AccountsVisibilityButton extends StatelessWidget {
+  const _AccountsVisibilityButton({
+    required this.isVisible,
+    required this.onPressed,
+  });
+
+  final bool isVisible;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 38,
+      height: 38,
+      child: IconButton(
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.16),
+          foregroundColor: Colors.white,
+          shape: const CircleBorder(
+            side: BorderSide(color: Color(0x33FFFFFF)),
+          ),
+        ),
+        icon: Icon(
+          isVisible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+          size: 21,
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountsTotalGlow extends StatelessWidget {
+  const _AccountsTotalGlow({
+    required this.size,
+    required this.opacity,
+  });
+
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size * 0.72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: opacity),
+      ),
+    );
+  }
+}
+
+Color _shiftColor(Color color, {required double lightnessDelta}) {
+  final hsl = HSLColor.fromColor(color);
+  return hsl
+      .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+      .toColor();
 }
 
 class _EmergencyReserveCard extends StatelessWidget {
@@ -372,7 +738,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                             ),
                       ),
                       Text(
-                        '${reserveAccount.type} • ${reserveAccount.bankName ?? 'Sem banco'}',
+                        '${reserveAccount.type} - ${reserveAccount.bankName ?? 'Sem banco'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -393,7 +759,7 @@ class _EmergencyReserveCard extends StatelessWidget {
                       currencyCode: reserveAccount.currencyCode,
                     ),
                     secondaryValue: shouldShowConvertedBalance
-                        ? '≈ ${CurrencyUtils.formatCents(
+                        ? 'aprox. ${CurrencyUtils.formatCents(
                             reserveAccount.consolidatedBalanceCents,
                             currencyCode: state.currencyCode,
                           )}'
@@ -656,183 +1022,251 @@ class _EmptyAccounts extends StatelessWidget {
   }
 }
 
-class _AccountDetailSheet extends StatelessWidget {
-  const _AccountDetailSheet({
-    required this.account,
-    required this.displayCurrencyCode,
-    required this.history,
-    required this.onEdit,
+class AccountDetailPage extends ConsumerStatefulWidget {
+  const AccountDetailPage({
+    required this.accountId,
+    super.key,
   });
 
-  final AccountPreview account;
-  final String displayCurrencyCode;
-  final List<TransactionListItem> history;
-  final VoidCallback onEdit;
+  final int accountId;
+
+  @override
+  ConsumerState<AccountDetailPage> createState() => _AccountDetailPageState();
+}
+
+class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
+  DateTime? _visibleMonth;
+
+  void _moveMonth(
+    int delta, {
+    required DateTime currentMonth,
+    required DateTime firstAvailableMonth,
+  }) {
+    final nextMonth = _maxMonth(
+      DateTime(currentMonth.year, currentMonth.month + delta),
+      firstAvailableMonth,
+    );
+    setState(() {
+      _visibleMonth = nextMonth;
+    });
+    ref.read(accountsViewModelProvider.notifier).selectMonth(nextMonth);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accountsState = ref.watch(accountsViewModelProvider);
+    final transactionsState = ref.watch(transactionsViewModelProvider);
+    final account = accountsState.accounts
+        .where((item) => item.id == widget.accountId)
+        .firstOrNull;
+    final rawVisibleMonth = _visibleMonth ?? accountsState.selectedMonth;
+    final visibleMonth = account == null
+        ? rawVisibleMonth
+        : _maxMonth(
+            rawVisibleMonth,
+            account.firstAvailableMonth ?? accountsState.firstAvailableMonth,
+          );
+
+    ref.listen(accountsViewModelProvider.select((state) => state.errorMessage),
+        (
+      previous,
+      next,
+    ) {
+      if (next == null || next == previous) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(next)),
+      );
+    });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(account?.name ?? 'Conta'),
+        actions: [
+          if (account != null) ...[
+            IconButton(
+              onPressed: () => AccountsPage._openAccountYieldForm(
+                context,
+                ref,
+                account,
+              ),
+              tooltip: 'Registrar rendimento',
+              icon: const Icon(Icons.trending_up_rounded),
+            ),
+            IconButton(
+              onPressed: () => context.pop(true),
+              tooltip: 'Editar conta',
+              icon: const Icon(Icons.edit_rounded),
+            ),
+          ],
+        ],
+      ),
+      body: account == null
+          ? _MissingAccountView(isLoading: accountsState.isLoading)
+          : SafeArea(
+              bottom: false,
+              child: _AccountDetailContent(
+                account: account,
+                displayCurrencyCode: accountsState.currencyCode,
+                visibleMonth: visibleMonth,
+                canGoPreviousMonth: _isAfterMonth(
+                  visibleMonth,
+                  account.firstAvailableMonth ??
+                      accountsState.firstAvailableMonth,
+                ),
+                onPreviousMonth: () => _moveMonth(
+                  -1,
+                  currentMonth: visibleMonth,
+                  firstAvailableMonth: account.firstAvailableMonth ??
+                      accountsState.firstAvailableMonth,
+                ),
+                onNextMonth: () => _moveMonth(
+                  1,
+                  currentMonth: visibleMonth,
+                  firstAvailableMonth: account.firstAvailableMonth ??
+                      accountsState.firstAvailableMonth,
+                ),
+                history: AccountsPage._accountHistoryFor(
+                  transactionsState.transactions,
+                  account.id,
+                  month: visibleMonth,
+                ),
+                onRegisterYield: () => AccountsPage._openAccountYieldForm(
+                  context,
+                  ref,
+                  account,
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _MissingAccountView extends StatelessWidget {
+  const _MissingAccountView({required this.isLoading});
+
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final shouldShowConvertedBalance =
-        account.currencyCode.toUpperCase() != displayCurrencyCode.toUpperCase();
 
-    return FractionallySizedBox(
-      heightFactor: 0.86,
+    return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          12,
-          20,
-          20 + MediaQuery.viewPaddingOf(context).bottom,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: colors.border,
-                  borderRadius: BorderRadius.circular(999),
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading) ...[
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+              ] else ...[
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 46,
+                  color: colors.textSecondary,
                 ),
+                const SizedBox(height: 14),
+              ],
+              Text(
+                isLoading ? 'Carregando conta...' : 'Conta não encontrada.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: account.color,
-                  foregroundColor: colors.onPrimary,
-                  child: Text(
-                    _initialsFor(account.name),
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        account.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge,
+              if (!isLoading) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Ela pode ter sido removida ou ainda não foi sincronizada na lista local.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.textSecondary,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${account.type} â€¢ ${account.bankName ?? 'Sem banco'}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton.filledTonal(
-                  onPressed: onEdit,
-                  tooltip: 'Editar conta',
-                  icon: const Icon(Icons.edit_rounded),
                 ),
               ],
-            ),
-            const SizedBox(height: 18),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.accentSoft,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Saldo da conta',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(color: colors.textSecondary),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            CurrencyUtils.formatCents(
-                              account.balanceCents,
-                              currencyCode: account.currencyCode,
-                            ),
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(color: colors.primary),
-                          ),
-                          if (shouldShowConvertedBalance) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              'â‰ˆ ${CurrencyUtils.formatCents(
-                                account.consolidatedBalanceCents,
-                                currencyCode: displayCurrencyCode,
-                              )}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: colors.textSecondary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      account.includeInTotalBalance
-                          ? Icons.add_chart_rounded
-                          : Icons.visibility_off_rounded,
-                      color: colors.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'HistÃ³rico da conta',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: history.isEmpty
-                  ? const _EmptyAccountHistory()
-                  : ListView.separated(
-                      itemCount: history.length,
-                      separatorBuilder: (_, __) => Divider(
-                        color: colors.border,
-                        height: 1,
-                      ),
-                      itemBuilder: (context, index) {
-                        return _AccountHistoryTile(
-                          account: account,
-                          transaction: history[index],
-                        );
-                      },
-                    ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  static String _initialsFor(String name) {
-    final trimmedName = name.trim();
-    if (trimmedName.isEmpty) {
-      return '?';
-    }
-    return trimmedName.characters.take(2).toString().toUpperCase();
+class _AccountDetailContent extends StatelessWidget {
+  const _AccountDetailContent({
+    required this.account,
+    required this.displayCurrencyCode,
+    required this.visibleMonth,
+    required this.canGoPreviousMonth,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.history,
+    required this.onRegisterYield,
+  });
+
+  final AccountPreview account;
+  final String displayCurrencyCode;
+  final DateTime visibleMonth;
+  final bool canGoPreviousMonth;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final List<TransactionListItem> history;
+  final VoidCallback onRegisterYield;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        20 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AccountsMonthPager(
+            month: visibleMonth,
+            canGoPrevious: canGoPreviousMonth,
+            onPrevious: onPreviousMonth,
+            onNext: onNextMonth,
+          ),
+          const SizedBox(height: 18),
+          _AccountTile(
+            account: account,
+            displayCurrencyCode: displayCurrencyCode,
+            onTap: null,
+            onRegisterYield: onRegisterYield,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Histórico da conta',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          if (history.isEmpty)
+            const _EmptyAccountHistory()
+          else
+            for (var index = 0; index < history.length; index++) ...[
+              _AccountHistoryTile(
+                account: account,
+                transaction: history[index],
+                onTap: () => context.push(
+                  '/transactions/${history[index].kind.name}/${history[index].id}',
+                ),
+              ),
+              if (index < history.length - 1)
+                Divider(
+                  color: colors.border,
+                  height: 1,
+                ),
+            ],
+        ],
+      ),
+    );
   }
 }
 
@@ -856,7 +1290,7 @@ class _EmptyAccountHistory extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Ainda nÃ£o hÃ¡ lanÃ§amentos nesta conta.',
+              'Ainda não há lançamentos nesta conta.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -871,10 +1305,12 @@ class _AccountHistoryTile extends StatelessWidget {
   const _AccountHistoryTile({
     required this.account,
     required this.transaction,
+    required this.onTap,
   });
 
   final AccountPreview account;
   final TransactionListItem transaction;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -890,69 +1326,73 @@ class _AccountHistoryTile extends StatelessWidget {
         ? transaction.toCurrencyCode ?? transaction.currencyCode
         : transaction.currencyCode;
     final detail = transaction.isTransfer
-        ? '${transaction.accountName} â†’ ${transaction.toAccountName ?? 'Conta'}'
-        : '${transaction.categoryName} â€¢ ${transaction.paymentMethodLabel}';
+        ? '${transaction.accountName} -> ${transaction.toAccountName ?? 'Conta'}'
+        : '${transaction.categoryName} - ${transaction.paymentMethodLabel}';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: transaction.iconColor.withValues(alpha: 0.13),
-            foregroundColor: transaction.iconColor,
-            child: Icon(transaction.icon, size: 19),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 19,
+              backgroundColor: transaction.iconColor.withValues(alpha: 0.13),
+              foregroundColor: transaction.iconColor,
+              child: Icon(transaction.icon, size: 19),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$detail - ${_shortDate(transaction.date)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  transaction.title,
+                  '${isPositive ? '+ ' : '- '}${CurrencyUtils.formatCents(
+                    amountCents,
+                    currencyCode: currencyCode,
+                  )}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isPositive ? colors.success : colors.textPrimary,
+                        fontWeight: FontWeight.w900,
+                      ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$detail â€¢ ${_shortDate(transaction.date)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  transaction.isPaid ? 'Efetivado' : 'Pendente',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: transaction.isPaid
+                            ? colors.textSecondary
+                            : colors.warning,
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${isPositive ? '+ ' : '- '}${CurrencyUtils.formatCents(
-                  amountCents,
-                  currencyCode: currencyCode,
-                )}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isPositive ? colors.success : colors.textPrimary,
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                transaction.isPaid ? 'Efetivado' : 'Pendente',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: transaction.isPaid
-                          ? colors.textSecondary
-                          : colors.warning,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -962,105 +1402,398 @@ class _AccountHistoryTile extends StatelessWidget {
   }
 }
 
+bool _isBeforeMonth(DateTime left, DateTime right) {
+  return left.year < right.year ||
+      (left.year == right.year && left.month < right.month);
+}
+
+bool _isAfterMonth(DateTime left, DateTime right) {
+  return left.year > right.year ||
+      (left.year == right.year && left.month > right.month);
+}
+
+DateTime _maxMonth(DateTime left, DateTime right) {
+  return _isBeforeMonth(left, right) ? right : left;
+}
+
+class _AccountsSection extends StatelessWidget {
+  const _AccountsSection({
+    required this.accounts,
+    required this.displayCurrencyCode,
+    required this.onAdd,
+    required this.onTapAccount,
+    required this.onRegisterYield,
+  });
+
+  final List<AccountPreview> accounts;
+  final String displayCurrencyCode;
+  final VoidCallback onAdd;
+  final ValueChanged<AccountPreview> onTapAccount;
+  final ValueChanged<AccountPreview> onRegisterYield;
+
+  @override
+  Widget build(BuildContext context) {
+    if (accounts.isEmpty) {
+      return SectionCard(
+        title: 'Minhas contas',
+        trailing: TextButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Adicionar'),
+        ),
+        child: const _EmptyAccounts(),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Minhas contas',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Adicionar'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isTablet = constraints.maxWidth >= 680;
+            final cardWidth = isTablet
+                ? ((constraints.maxWidth - 14) / 2)
+                : constraints.maxWidth;
+
+            return Wrap(
+              spacing: 14,
+              runSpacing: 14,
+              children: [
+                for (final account in accounts)
+                  SizedBox(
+                    width: cardWidth.toDouble(),
+                    child: _AccountTile(
+                      account: account,
+                      displayCurrencyCode: displayCurrencyCode,
+                      onTap: () => onTapAccount(account),
+                      onRegisterYield: () => onRegisterYield(account),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class _AccountTile extends StatelessWidget {
   const _AccountTile({
     required this.account,
     required this.displayCurrencyCode,
     required this.onTap,
+    required this.onRegisterYield,
   });
 
   final AccountPreview account;
   final String displayCurrencyCode;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final VoidCallback onRegisterYield;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final trimmedName = account.name.trim();
-    final initials = trimmedName.isEmpty
-        ? '?'
-        : trimmedName.characters.take(2).toString().toUpperCase();
+    final baseColor = account.color;
+    final gradientStart = _shiftColor(baseColor, lightnessDelta: 0.10);
+    final gradientEnd = _shiftColor(baseColor, lightnessDelta: -0.12);
     final shouldShowConvertedBalance =
         account.currencyCode.toUpperCase() != displayCurrencyCode.toUpperCase();
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 25,
-              backgroundColor: account.color,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [gradientStart, gradientEnd],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: baseColor.withValues(alpha: 0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -48,
+                  top: -54,
+                  child: _AccountCardGlow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    account.name,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                Positioned(
+                  left: -60,
+                  bottom: -70,
+                  child: _AccountCardGlow(
+                    color: Colors.white.withValues(alpha: 0.08),
                   ),
-                  Text(
-                    '${account.type} • ${account.bankName ?? 'Sem banco'}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 126),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    CurrencyUtils.formatCents(
-                      account.balanceCents,
-                      currencyCode: account.currencyCode,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  if (shouldShowConvertedBalance) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      '≈ ${CurrencyUtils.formatCents(
-                        account.consolidatedBalanceCents,
-                        currencyCode: displayCurrencyCode,
-                      )}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colors.textSecondary,
-                            fontWeight: FontWeight.w600,
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.18),
+                            foregroundColor: Colors.white,
+                            child: Text(
+                              _initialsFor(account.name),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
                           ),
-                    ),
-                  ],
-                ],
-              ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  account.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(color: Colors.white),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${account.type} - ${account.bankName ?? 'Sem banco'}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: onRegisterYield,
+                            tooltip: 'Registrar rendimento',
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.15),
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(
+                              Icons.trending_up_rounded,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Saldo atual',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        CurrencyUtils.formatCents(
+                          account.balanceCents,
+                          currencyCode: account.currencyCode,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                      ),
+                      if (shouldShowConvertedBalance) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'aprox. ${CurrencyUtils.formatCents(
+                            account.consolidatedBalanceCents,
+                            currencyCode: displayCurrencyCode,
+                          )}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _AccountCardMetric(
+                              label: 'Inicial',
+                              value: CurrencyUtils.formatCents(
+                                account.initialBalanceCents,
+                                currencyCode: account.currencyCode,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _AccountCardMetric(
+                              label: 'Receitas',
+                              value: CurrencyUtils.formatCents(
+                                account.monthlyIncomeCents,
+                                currencyCode: account.currencyCode,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _AccountCardMetric(
+                              label: 'Despesas',
+                              value: CurrencyUtils.formatCents(
+                                account.monthlyExpenseCents,
+                                currencyCode: account.currencyCode,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _AccountCardMetric(
+                              label: 'Rendimentos',
+                              value: CurrencyUtils.formatCents(
+                                account.monthlyYieldCents,
+                                currencyCode: account.currencyCode,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 2),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _initialsFor(String name) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      return '?';
+    }
+    return trimmedName.characters.take(2).toString().toUpperCase();
+  }
+
+  Color _shiftColor(Color color, {required double lightnessDelta}) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+        .toColor();
+  }
+}
+
+class _AccountCardGlow extends StatelessWidget {
+  const _AccountCardGlow({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 150,
+      height: 105,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+      ),
+    );
+  }
+}
+
+class _AccountCardMetric extends StatelessWidget {
+  const _AccountCardMetric({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
             ),
           ],
         ),
@@ -1135,6 +1868,328 @@ class _DistributionRow extends StatelessWidget {
   }
 }
 
+class _AccountYieldFormSheet extends StatefulWidget {
+  const _AccountYieldFormSheet({
+    required this.account,
+    required this.onSubmit,
+  });
+
+  final AccountPreview account;
+  final Future<void> Function({
+    required int amountCents,
+    required DateTime date,
+  }) onSubmit;
+
+  @override
+  State<_AccountYieldFormSheet> createState() => _AccountYieldFormSheetState();
+}
+
+class _AccountYieldFormSheetState extends State<_AccountYieldFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _yieldController = TextEditingController();
+  final _currentBalanceController = TextEditingController();
+  late DateTime _date;
+  bool _calculateFromCurrentBalance = false;
+  bool _isSubmitting = false;
+
+  AccountPreview get account => widget.account;
+
+  int get _calculatedYieldCents {
+    if (_calculateFromCurrentBalance) {
+      return CurrencyUtils.parseToCents(_currentBalanceController.text) -
+          account.balanceCents;
+    }
+
+    return CurrencyUtils.parseToCents(_yieldController.text);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _date = DateTime.now();
+    _yieldController.addListener(_refreshPreview);
+    _currentBalanceController.addListener(_refreshPreview);
+  }
+
+  @override
+  void dispose() {
+    _yieldController.removeListener(_refreshPreview);
+    _currentBalanceController.removeListener(_refreshPreview);
+    _yieldController.dispose();
+    _currentBalanceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final calculatedYieldCents = _calculatedYieldCents;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.viewPaddingOf(context).bottom +
+            20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Registrar rendimento',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.accentSoft,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: account.color,
+                        foregroundColor: Colors.white,
+                        child: Text(
+                          account.name.characters.take(2).toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              account.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              'Saldo anterior: ${CurrencyUtils.formatCents(
+                                account.balanceCents,
+                                currencyCode: account.currencyCode,
+                              )}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Como informar?',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    selected: !_calculateFromCurrentBalance,
+                    label: const Text('Valor do rendimento'),
+                    avatar: const Icon(Icons.add_chart_rounded, size: 18),
+                    onSelected: (_) {
+                      setState(() => _calculateFromCurrentBalance = false);
+                    },
+                  ),
+                  ChoiceChip(
+                    selected: _calculateFromCurrentBalance,
+                    label: const Text('Saldo atual'),
+                    avatar: const Icon(Icons.account_balance_wallet_rounded,
+                        size: 18),
+                    onSelected: (_) {
+                      setState(() => _calculateFromCurrentBalance = true);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (_calculateFromCurrentBalance)
+                TextFormField(
+                  controller: _currentBalanceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Saldo atual informado',
+                    hintText: 'Ex: 2540,20',
+                    prefixIcon: const Icon(Icons.payments_rounded),
+                    helperText:
+                        'O app calcula o rendimento comparando com o saldo anterior.',
+                  ),
+                  validator: (value) {
+                    final currentBalanceCents =
+                        CurrencyUtils.parseToCents(value ?? '');
+                    if (currentBalanceCents <= 0) {
+                      return 'Informe o saldo atual.';
+                    }
+                    if (currentBalanceCents <= account.balanceCents) {
+                      return 'O saldo atual precisa ser maior que o saldo anterior.';
+                    }
+                    return null;
+                  },
+                )
+              else
+                TextFormField(
+                  controller: _yieldController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Valor do rendimento',
+                    hintText: 'Ex: 32,45',
+                    prefixIcon: Icon(Icons.trending_up_rounded),
+                  ),
+                  validator: (value) {
+                    if (CurrencyUtils.parseToCents(value ?? '') <= 0) {
+                      return 'Informe o valor do rendimento.';
+                    }
+                    return null;
+                  },
+                ),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: _pickDate,
+                borderRadius: BorderRadius.circular(16),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Data',
+                    prefixIcon: Icon(Icons.event_available_rounded),
+                  ),
+                  child: Text(_formatDate(_date)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.savings_rounded, color: colors.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          calculatedYieldCents > 0
+                              ? 'Rendimento calculado: ${CurrencyUtils.formatCents(
+                                  calculatedYieldCents,
+                                  currencyCode: account.currencyCode,
+                                )}'
+                              : 'O rendimento entra como receita efetivada nesta conta.',
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: colors.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isSubmitting ? null : _submit,
+                  child: Text(
+                    _isSubmitting ? 'Salvando...' : 'Salvar rendimento',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null) {
+      setState(() => _date = picked);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final amountCents = _calculatedYieldCents;
+    if (amountCents <= 0) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.onSubmit(
+        amountCents: amountCents,
+        date: _date,
+      );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  void _refreshPreview() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  static String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+}
+
 class _AccountFormSheet extends StatefulWidget {
   const _AccountFormSheet({
     required this.onSubmit,
@@ -1177,14 +2232,6 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
     'Investimento',
   ];
 
-  static const _colors = [
-    '#006B4F',
-    '#2F80ED',
-    '#7C3AED',
-    '#F59E0B',
-    '#D93025',
-  ];
-
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _bankNameController;
@@ -1207,7 +2254,7 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
       text: account == null
           ? ''
           : CurrencyUtils.formatCents(
-              account.balanceCents,
+              account.initialBalanceCents,
               currencyCode: account.currencyCode,
             ),
     );
@@ -1220,7 +2267,8 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
         : _accountTypes.contains(initialType)
             ? initialType!
             : _accountTypes.first;
-    _selectedColor = account?.colorHex ?? _colors.first;
+    _selectedColor =
+        account?.colorHex ?? FinancialColorOptions.accountAndCard.first;
     _selectedCurrencyCode = account?.currencyCode ?? widget.defaultCurrencyCode;
   }
 
@@ -1410,8 +2458,9 @@ class _AccountFormSheetState extends State<_AccountFormSheet> {
               const SizedBox(height: 10),
               Wrap(
                 spacing: 10,
+                runSpacing: 10,
                 children: [
-                  for (final color in _colors)
+                  for (final color in FinancialColorOptions.accountAndCard)
                     _ColorOption(
                       color: color,
                       isSelected: color == _selectedColor,
@@ -1558,6 +2607,8 @@ class _ColorOption extends StatelessWidget {
     final parsedColor = Color(
       int.parse('FF${color.replaceFirst('#', '')}', radix: 16),
     );
+    final checkColor =
+        parsedColor.computeLuminance() > 0.55 ? Colors.black : Colors.white;
 
     return InkWell(
       onTap: onTap,
@@ -1573,9 +2624,7 @@ class _ColorOption extends StatelessWidget {
             width: 3,
           ),
         ),
-        child: isSelected
-            ? const Icon(Icons.check_rounded, color: Colors.white)
-            : null,
+        child: isSelected ? Icon(Icons.check_rounded, color: checkColor) : null,
       ),
     );
   }

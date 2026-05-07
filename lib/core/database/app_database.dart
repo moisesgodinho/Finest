@@ -11,6 +11,7 @@ import 'daos/categories_dao.dart';
 import 'daos/credit_card_invoices_dao.dart';
 import 'daos/credit_cards_dao.dart';
 import 'daos/exchange_rates_dao.dart';
+import 'daos/goals_dao.dart';
 import 'daos/transactions_dao.dart';
 import 'daos/transfers_dao.dart';
 import 'daos/users_dao.dart';
@@ -20,6 +21,7 @@ import 'tables/categories_table.dart';
 import 'tables/credit_card_invoices_table.dart';
 import 'tables/credit_cards_table.dart';
 import 'tables/exchange_rates_table.dart';
+import 'tables/goals_table.dart';
 import 'tables/investments_table.dart';
 import 'tables/monthly_plans_table.dart';
 import 'tables/pet_evolution_events_table.dart';
@@ -47,6 +49,7 @@ part 'app_database.g.dart';
     BackupLogs,
     Transfers,
     ExchangeRates,
+    Goals,
   ],
   daos: [
     UsersDao,
@@ -57,13 +60,16 @@ part 'app_database.g.dart';
     TransactionsDao,
     TransfersDao,
     ExchangeRatesDao,
+    GoalsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  AppDatabase.forTesting(super.executor);
+
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -269,11 +275,92 @@ class AppDatabase extends _$AppDatabase {
               createTable: () => migrator.createTable(petEvolutionEvents),
             );
           }
+          if (from < 11) {
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'accounts',
+              columnName: 'goal_linked_account_id',
+              addColumn: () => migrator.addColumn(
+                accounts,
+                accounts.goalLinkedAccountId,
+              ),
+            );
+            await _addColumnIfMissing(
+              migrator,
+              tableName: 'accounts',
+              columnName: 'goal_target_date',
+              addColumn: () => migrator.addColumn(
+                accounts,
+                accounts.goalTargetDate,
+              ),
+            );
+          }
+          if (from < 12) {
+            await _createTableIfMissing(
+              migrator,
+              tableName: 'goals',
+              createTable: () => migrator.createTable(goals),
+            );
+            await _migrateLegacyGoalAccounts();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  Future<void> _migrateLegacyGoalAccounts() async {
+    await customStatement('''
+INSERT INTO goals (
+  user_id,
+  name,
+  linked_account_id,
+  target_amount,
+  target_date,
+  color,
+  created_at,
+  updated_at
+)
+SELECT
+  legacy.user_id,
+  legacy.name,
+  CASE
+    WHEN legacy.goal_linked_account_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM accounts linked
+        WHERE linked.id = legacy.goal_linked_account_id
+          AND linked.user_id = legacy.user_id
+          AND linked.type <> 'goal'
+      )
+    THEN legacy.goal_linked_account_id
+    ELSE NULL
+  END,
+  COALESCE(legacy.emergency_reserve_target, 0),
+  legacy.goal_target_date,
+  legacy.color,
+  legacy.created_at,
+  legacy.updated_at
+FROM accounts legacy
+WHERE legacy.type = 'goal'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM goals existing
+    WHERE existing.user_id = legacy.user_id
+      AND existing.name = legacy.name
+      AND (
+        existing.linked_account_id = legacy.goal_linked_account_id
+        OR (
+          existing.linked_account_id IS NULL
+          AND legacy.goal_linked_account_id IS NULL
+        )
+      )
+  )
+''');
+    await customStatement(
+      "UPDATE accounts SET include_in_total_balance = 0 WHERE type = 'goal'",
+    );
+  }
 
   Future<void> _addColumnIfMissing(
     Migrator migrator, {

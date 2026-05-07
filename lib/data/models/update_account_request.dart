@@ -11,6 +11,8 @@ class UpdateAccountRequest {
     required this.color,
     this.bankName,
     this.emergencyReserveTarget,
+    this.goalLinkedAccountId,
+    this.goalTargetDate,
     this.icon,
   });
 
@@ -25,5 +27,7 @@ class UpdateAccountRequest {
   final String currencyCode;
   final String color;
   final int? emergencyReserveTarget;
+  final int? goalLinkedAccountId;
+  final DateTime? goalTargetDate;
   final String? icon;
 }

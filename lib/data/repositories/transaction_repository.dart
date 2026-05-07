@@ -20,11 +20,22 @@ abstract class TransactionRepository {
 
   Future<void> updateTransaction(UpdateTransactionRequest request);
 
+  Future<void> updateTransactions(List<UpdateTransactionRequest> requests);
+
   Future<void> updateCreditCardExpense(UpdateCreditCardExpenseRequest request);
+
+  Future<void> updateCreditCardExpenses(
+    List<UpdateCreditCardExpenseRequest> requests,
+  );
 
   Future<void> deleteTransaction({
     required int userId,
     required int transactionId,
+  });
+
+  Future<void> deleteTransactions({
+    required int userId,
+    required List<int> transactionIds,
   });
 }
 
@@ -367,6 +378,22 @@ class DriftTransactionRepository implements TransactionRepository {
   }
 
   @override
+  Future<void> updateTransactions(
+    List<UpdateTransactionRequest> requests,
+  ) async {
+    if (requests.isEmpty) {
+      return;
+    }
+    _ensureSingleUser(requests.map((request) => request.userId));
+
+    await _database.transaction(() async {
+      for (final request in requests) {
+        await updateTransaction(request);
+      }
+    });
+  }
+
+  @override
   Future<void> updateCreditCardExpense(
     UpdateCreditCardExpenseRequest request,
   ) async {
@@ -465,6 +492,22 @@ class DriftTransactionRepository implements TransactionRepository {
   }
 
   @override
+  Future<void> updateCreditCardExpenses(
+    List<UpdateCreditCardExpenseRequest> requests,
+  ) async {
+    if (requests.isEmpty) {
+      return;
+    }
+    _ensureSingleUser(requests.map((request) => request.userId));
+
+    await _database.transaction(() async {
+      for (final request in requests) {
+        await updateCreditCardExpense(request);
+      }
+    });
+  }
+
+  @override
   Future<void> deleteTransaction({
     required int userId,
     required int transactionId,
@@ -533,6 +576,22 @@ class DriftTransactionRepository implements TransactionRepository {
           currentBalance:
               account.currentBalance - _transactionDelta(transaction),
         );
+      }
+    });
+  }
+
+  @override
+  Future<void> deleteTransactions({
+    required int userId,
+    required List<int> transactionIds,
+  }) async {
+    if (transactionIds.isEmpty) {
+      return;
+    }
+
+    await _database.transaction(() async {
+      for (final transactionId in transactionIds) {
+        await deleteTransaction(userId: userId, transactionId: transactionId);
       }
     });
   }
@@ -633,6 +692,14 @@ class DriftTransactionRepository implements TransactionRepository {
 
   void _addAccountDelta(Map<int, int> deltas, int accountId, int delta) {
     deltas[accountId] = (deltas[accountId] ?? 0) + delta;
+  }
+
+  void _ensureSingleUser(Iterable<int> userIds) {
+    final uniqueUserIds = userIds.toSet();
+    if (uniqueUserIds.length > 1) {
+      throw ArgumentError(
+          'Todas as operaÃ§Ãµes devem pertencer ao mesmo usuÃ¡rio.');
+    }
   }
 
   void _validateTransactionFields({

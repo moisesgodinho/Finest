@@ -6,6 +6,7 @@ import '../../core/utils/currency_utils.dart';
 import '../../core/utils/date_utils.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/subcategory_model.dart';
+import '../../shared/widgets/app_popup_menu_item.dart';
 import '../../shared/widgets/section_card.dart';
 import 'categories_view_model.dart';
 
@@ -968,7 +969,7 @@ class _CategoryTile extends StatelessWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PopupMenuButton<String>(
+                AppPopupMenuButton<String>(
                   tooltip: 'Ações',
                   onSelected: (value) {
                     if (value == 'edit') {
@@ -980,11 +981,18 @@ class _CategoryTile extends StatelessWidget {
                   itemBuilder: (context) => const [
                     PopupMenuItem(
                       value: 'edit',
-                      child: Text('Editar'),
+                      child: AppPopupMenuItem(
+                        icon: Icons.edit_rounded,
+                        label: 'Editar',
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text('Excluir'),
+                      child: AppPopupMenuItem(
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Excluir',
+                        isDestructive: true,
+                      ),
                     ),
                   ],
                 ),

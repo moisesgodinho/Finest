@@ -12,7 +12,8 @@ class AccountsDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<Account>> watchByUser(int userId) {
     final query = select(accounts)
-      ..where((table) => table.userId.equals(userId))
+      ..where((table) =>
+          table.userId.equals(userId) & table.type.equals('goal').not())
       ..orderBy([(table) => OrderingTerm(expression: table.name)]);
 
     return query.watch();
@@ -20,7 +21,8 @@ class AccountsDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<Account>> findByUser(int userId) {
     final query = select(accounts)
-      ..where((table) => table.userId.equals(userId))
+      ..where((table) =>
+          table.userId.equals(userId) & table.type.equals('goal').not())
       ..orderBy([(table) => OrderingTerm(expression: table.name)]);
 
     return query.get();
@@ -64,6 +66,21 @@ class AccountsDao extends DatabaseAccessor<AppDatabase>
         .write(
       AccountsCompanion(
         currentBalance: Value(currentBalance),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<int> updateIncludeInTotalBalance({
+    required int id,
+    required int userId,
+    required bool includeInTotalBalance,
+  }) {
+    return (update(accounts)
+          ..where((table) => table.id.equals(id) & table.userId.equals(userId)))
+        .write(
+      AccountsCompanion(
+        includeInTotalBalance: Value(includeInTotalBalance),
         updatedAt: Value(DateTime.now()),
       ),
     );

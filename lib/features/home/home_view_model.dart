@@ -17,6 +17,7 @@ import '../../data/repositories/account_repository.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/credit_card_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../data/repositories/transfer_repository.dart';
 
 class HomeState {
   const HomeState({
@@ -183,6 +184,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     required CategoryRepository categoryRepository,
     required CreditCardRepository creditCardRepository,
     required TransactionRepository transactionRepository,
+    required TransferRepository transferRepository,
     required ExchangeRateService exchangeRateService,
     required String currencyCode,
   })  : _userId = userId,
@@ -190,6 +192,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
         _categoryRepository = categoryRepository,
         _creditCardRepository = creditCardRepository,
         _transactionRepository = transactionRepository,
+        _transferRepository = transferRepository,
         _exchangeRateService = exchangeRateService,
         _currencyCode = currencyCode,
         super(HomeState.initial(userName: userName).copyWith(
@@ -203,6 +206,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
   final CategoryRepository _categoryRepository;
   final CreditCardRepository _creditCardRepository;
   final TransactionRepository _transactionRepository;
+  final TransferRepository _transferRepository;
   final ExchangeRateService _exchangeRateService;
   final String _currencyCode;
   StreamSubscription<List<Account>>? _accountsSubscription;
@@ -210,11 +214,13 @@ class HomeViewModel extends StateNotifier<HomeState> {
   StreamSubscription<List<CreditCard>>? _creditCardsSubscription;
   StreamSubscription<List<CreditCardInvoice>>? _creditCardInvoicesSubscription;
   StreamSubscription<List<FinanceTransaction>>? _transactionsSubscription;
+  StreamSubscription<List<AccountTransfer>>? _transfersSubscription;
   List<Account> _accounts = [];
   List<CategoryModel> _categories = [];
   List<CreditCard> _creditCards = [];
   List<CreditCardInvoice> _creditCardInvoices = [];
   List<FinanceTransaction> _transactions = [];
+  List<AccountTransfer> _transfers = [];
 
   void toggleBalanceVisibility() {
     state = state.copyWith(isBalanceVisible: !state.isBalanceVisible);
@@ -263,10 +269,28 @@ class HomeViewModel extends StateNotifier<HomeState> {
         _publishState();
       },
     );
+
+    _transfersSubscription = _transferRepository.watchTransfers(userId).listen(
+      (transfers) {
+        _transfers = transfers;
+        _publishState();
+      },
+    );
   }
 
   Future<void> _publishState() async {
-    final ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    if (!mounted) {
+      return;
+    }
+    final Map<String, double> ratesToBrl;
+    try {
+      ratesToBrl = await _exchangeRateService.ratesToBrlSnapshot();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     final now = DateTime.now();
     final firstDay = AppDateUtils.firstDayOfMonth(now);
     final lastDay = AppDateUtils.lastDayOfMonth(now);
@@ -351,7 +375,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     final currentBalanceCents = _accounts.fold<int>(
       0,
       (total, account) => account.includeInTotalBalance
-          ? total + _convertAccountAmount(account, ratesToBrl)
+          ? total + _convertAccountBalance(account, ratesToBrl)
           : total,
     );
     final initialMonthBalanceCents = currentBalanceCents -
@@ -537,13 +561,52 @@ class HomeViewModel extends StateNotifier<HomeState> {
     );
   }
 
-  int _convertAccountAmount(Account account, Map<String, double> ratesToBrl) {
+  int _convertAccountBalance(Account account, Map<String, double> ratesToBrl) {
     return _exchangeRateService.convertCentsWithRates(
-      amountCents: account.currentBalance,
+      amountCents: _reconciledCurrentBalance(account),
       fromCurrency: account.currencyCode,
       toCurrency: _currencyCode,
       ratesToBrl: ratesToBrl,
     );
+  }
+
+  int _reconciledCurrentBalance(Account account) {
+    var balanceCents = account.initialBalance;
+
+    for (final transaction in _transactions) {
+      if (!transaction.isPaid ||
+          transaction.accountId != account.id ||
+          transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      balanceCents += transaction.type == 'income'
+          ? transaction.amount
+          : -transaction.amount;
+    }
+
+    for (final transfer in _transfers) {
+      if (!transfer.isPaid) {
+        continue;
+      }
+
+      if (transfer.fromAccountId == account.id) {
+        balanceCents -= transfer.amount;
+      }
+      if (transfer.toAccountId == account.id) {
+        balanceCents += transfer.convertedAmount ?? transfer.amount;
+      }
+    }
+
+    for (final invoice in _creditCardInvoices) {
+      if (invoice.status != 'paid' || invoice.paymentAccountId != account.id) {
+        continue;
+      }
+
+      balanceCents -= invoice.amount;
+    }
+
+    return balanceCents;
   }
 
   String _currencyForCard(int cardId) {
@@ -615,8 +678,18 @@ class HomeViewModel extends StateNotifier<HomeState> {
   List<TransactionPreview> _buildRecentTransactions(
     Map<int, CategoryModel> categoryMap,
   ) {
-    final sortedTransactions = [..._transactions]
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final sortedTransactions = _transactions.where((transaction) {
+      return !_referenceDate(transaction).isAfter(today);
+    }).toList()
+      ..sort((a, b) {
+        final dateCompare = _referenceDate(b).compareTo(_referenceDate(a));
+        if (dateCompare != 0) {
+          return dateCompare;
+        }
+        return b.createdAt.compareTo(a.createdAt);
+      });
 
     return [
       for (final transaction in sortedTransactions.take(4))
@@ -630,7 +703,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
               Icons.category_rounded,
           iconColor:
               categoryMap[transaction.categoryId]?.color ?? AppColors.primary,
-          dateLabel: _dateLabel(transaction.date),
+          dateLabel: _dateLabel(_referenceDate(transaction)),
           isIncome: transaction.type == 'income',
           isPaid: transaction.isPaid,
         ),
@@ -674,6 +747,7 @@ class HomeViewModel extends StateNotifier<HomeState> {
     _creditCardsSubscription?.cancel();
     _creditCardInvoicesSubscription?.cancel();
     _transactionsSubscription?.cancel();
+    _transfersSubscription?.cancel();
     super.dispose();
   }
 }
@@ -688,6 +762,7 @@ final homeViewModelProvider =
     categoryRepository: ref.watch(categoryRepositoryProvider),
     creditCardRepository: ref.watch(creditCardRepositoryProvider),
     transactionRepository: ref.watch(transactionRepositoryProvider),
+    transferRepository: ref.watch(transferRepositoryProvider),
     exchangeRateService: ref.watch(exchangeRateServiceProvider),
     currencyCode: ref.watch(currencyControllerProvider),
   );

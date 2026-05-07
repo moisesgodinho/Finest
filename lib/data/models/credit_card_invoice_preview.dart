@@ -60,6 +60,7 @@ class CreditCardInvoiceTransactionPreview {
     this.entryKind,
     this.installmentNumber,
     this.totalInstallments,
+    this.isRecurring = false,
   }) : displayAmountCents = displayAmountCents ?? amountCents;
 
   final int id;
@@ -76,6 +77,7 @@ class CreditCardInvoiceTransactionPreview {
   final String? entryKind;
   final int? installmentNumber;
   final int? totalInstallments;
+  final bool isRecurring;
 
   bool get isExpense => type == 'expense';
   bool get isCredit => type == 'income';
@@ -85,7 +87,8 @@ class CreditCardInvoiceTransactionPreview {
       entryKind == 'installment' &&
       (installmentNumber ?? 0) > 0 &&
       (totalInstallments ?? 0) > 1;
-  bool get supportsSeriesScope => isInstallmentSeries;
+  bool get isFixedMonthlySeries => entryKind == 'fixed_monthly' && isRecurring;
+  bool get supportsSeriesScope => isInstallmentSeries || isFixedMonthlySeries;
 
   int get signedAmountCents => isCredit ? -amountCents : amountCents;
   int get consolidatedAmountCents => displayAmountCents;

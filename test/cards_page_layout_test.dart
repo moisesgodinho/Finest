@@ -116,6 +116,7 @@ final _cardsState = CardsState(
     ),
   ],
   subcategories: const [],
+  firstAvailableMonth: _fixedDate,
 );
 
 final _fixedDate = DateTime(2026, 5);

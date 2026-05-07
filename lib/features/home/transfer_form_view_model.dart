@@ -70,8 +70,12 @@ class TransferFormViewModel extends StateNotifier<TransferFormState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final installments =
-          transferKind == 'installment' ? totalInstallments ?? 1 : 1;
+      final isInstallment = transferKind == 'installment';
+      final installments = isInstallment
+          ? totalInstallments ?? 1
+          : transferKind == 'fixed_monthly'
+              ? 12
+              : 1;
       final baseName = name.trim();
 
       for (var index = 0; index < installments; index++) {
@@ -80,7 +84,7 @@ class TransferFormViewModel extends StateNotifier<TransferFormState> {
             userId: userId,
             fromAccountId: fromAccountId,
             toAccountId: toAccountId,
-            name: installments > 1
+            name: isInstallment && installments > 1
                 ? '$baseName (${index + 1}/$installments)'
                 : baseName,
             amountCents: amountCents,
@@ -89,8 +93,10 @@ class TransferFormViewModel extends StateNotifier<TransferFormState> {
             dueDate: _addMonths(dueDate, index),
             isPaid: index == 0 ? isPaid : false,
             date: _addMonths(date, index),
-            installmentNumber: installments > 1 ? index + 1 : null,
-            totalInstallments: installments > 1 ? installments : null,
+            installmentNumber:
+                isInstallment && installments > 1 ? index + 1 : null,
+            totalInstallments:
+                isInstallment && installments > 1 ? installments : null,
             exchangeRate: exchangeRate,
           ),
         );
