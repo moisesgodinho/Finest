@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +31,7 @@ class GoalsState {
     this.monthlyExpenseAverageCents = 0,
     this.suggestedEmergencyReserveCents = 0,
     this.balanceSeriesByGoalId = const {},
+    this.projectionsByGoalId = const {},
     this.isLoading = false,
     this.errorMessage,
   });
@@ -53,6 +55,7 @@ class GoalsState {
   final int monthlyExpenseAverageCents;
   final int suggestedEmergencyReserveCents;
   final Map<int, List<GoalBalancePoint>> balanceSeriesByGoalId;
+  final Map<int, GoalProjection> projectionsByGoalId;
   final bool isLoading;
   final String? errorMessage;
 
@@ -202,6 +205,10 @@ class GoalsState {
     return balanceSeriesByGoalId[goal.id] ?? const [];
   }
 
+  GoalProjection? projectionFor(GoalPreview goal) {
+    return projectionsByGoalId[goal.id];
+  }
+
   GoalPreview? goalById(int goalId) {
     for (final goal in goals) {
       if (goal.id == goalId) {
@@ -222,6 +229,7 @@ class GoalsState {
     int? monthlyExpenseAverageCents,
     int? suggestedEmergencyReserveCents,
     Map<int, List<GoalBalancePoint>>? balanceSeriesByGoalId,
+    Map<int, GoalProjection>? projectionsByGoalId,
     bool? isLoading,
     String? errorMessage,
     bool clearError = false,
@@ -239,6 +247,7 @@ class GoalsState {
           suggestedEmergencyReserveCents ?? this.suggestedEmergencyReserveCents,
       balanceSeriesByGoalId:
           balanceSeriesByGoalId ?? this.balanceSeriesByGoalId,
+      projectionsByGoalId: projectionsByGoalId ?? this.projectionsByGoalId,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
@@ -253,6 +262,109 @@ class GoalBalancePoint {
 
   final DateTime month;
   final int balanceCents;
+}
+
+class GoalProjection {
+  const GoalProjection({
+    required this.currentBalanceCents,
+    required this.targetCents,
+    required this.remainingCents,
+    required this.monthsToTarget,
+    required this.requiredMonthlyWithoutYieldCents,
+    required this.requiredMonthlyWithYieldCents,
+    required this.averageMonthlyYieldRate,
+    required this.averageAnnualYieldRate,
+    required this.yieldHistoryMonths,
+    required this.averageMonthlyContributionCents,
+    required this.estimatedMonthlyYieldCents,
+    required this.projectedFinalBalanceCents,
+    required this.projectedTotalInvestedCents,
+    required this.projectedInterestCents,
+    required this.projectedMonths,
+    required this.targetReachedAt,
+    required this.estimatedCompletionWithoutYield,
+    required this.estimatedCompletionWithYield,
+    required this.points,
+    required this.monthlyRows,
+    required this.annualRows,
+  });
+
+  final int currentBalanceCents;
+  final int targetCents;
+  final int remainingCents;
+  final int monthsToTarget;
+  final int requiredMonthlyWithoutYieldCents;
+  final int requiredMonthlyWithYieldCents;
+  final double averageMonthlyYieldRate;
+  final double averageAnnualYieldRate;
+  final int yieldHistoryMonths;
+  final int averageMonthlyContributionCents;
+  final int estimatedMonthlyYieldCents;
+  final int projectedFinalBalanceCents;
+  final int projectedTotalInvestedCents;
+  final int projectedInterestCents;
+  final int projectedMonths;
+  final DateTime? targetReachedAt;
+  final DateTime? estimatedCompletionWithoutYield;
+  final DateTime? estimatedCompletionWithYield;
+  final List<GoalProjectionPoint> points;
+  final List<GoalProjectionMonth> monthlyRows;
+  final List<GoalProjectionYear> annualRows;
+
+  bool get hasYieldHistory =>
+      yieldHistoryMonths > 0 && averageMonthlyYieldRate > 0;
+
+  bool get hasContributionPace => averageMonthlyContributionCents > 0;
+}
+
+class GoalProjectionPoint {
+  const GoalProjectionPoint({
+    required this.month,
+    required this.balanceWithoutYieldCents,
+    required this.balanceWithYieldCents,
+  });
+
+  final DateTime month;
+  final int balanceWithoutYieldCents;
+  final int balanceWithYieldCents;
+}
+
+class GoalProjectionMonth {
+  const GoalProjectionMonth({
+    required this.monthNumber,
+    required this.month,
+    required this.contributionCents,
+    required this.monthlyInterestCents,
+    required this.accumulatedInterestCents,
+    required this.totalInvestedCents,
+    required this.projectedBalanceCents,
+    required this.reachesTarget,
+  });
+
+  final int monthNumber;
+  final DateTime month;
+  final int contributionCents;
+  final int monthlyInterestCents;
+  final int accumulatedInterestCents;
+  final int totalInvestedCents;
+  final int projectedBalanceCents;
+  final bool reachesTarget;
+}
+
+class GoalProjectionYear {
+  const GoalProjectionYear({
+    required this.yearNumber,
+    required this.month,
+    required this.totalInvestedCents,
+    required this.accumulatedInterestCents,
+    required this.projectedBalanceCents,
+  });
+
+  final int yearNumber;
+  final DateTime month;
+  final int totalInvestedCents;
+  final int accumulatedInterestCents;
+  final int projectedBalanceCents;
 }
 
 class GoalsViewModel extends StateNotifier<GoalsState> {
@@ -296,6 +408,8 @@ class GoalsViewModel extends StateNotifier<GoalsState> {
   List<FinanceTransaction> _transactions = [];
   List<AccountTransfer> _transfers = [];
   MonthlyPlan? _monthlyPlan;
+
+  static const _yieldPaymentMethod = 'account_yield';
 
   Future<void> createGoal({
     required String name,
@@ -518,6 +632,13 @@ class GoalsViewModel extends StateNotifier<GoalsState> {
       for (final goal in _goals)
         goal.id: _balanceSeriesForGoal(goal, accountsById),
     };
+    final projectionsByGoalId = <int, GoalProjection>{
+      for (final goal in _goals)
+        goal.id: _projectionForGoal(
+          goal,
+          accountsById[goal.linkedAccountId],
+        ),
+    };
     final monthTransactions = _transactions.where((transaction) {
       final referenceDate = _referenceDate(transaction);
       return !referenceDate.isBefore(firstDay) &&
@@ -547,9 +668,418 @@ class GoalsViewModel extends StateNotifier<GoalsState> {
       suggestedEmergencyReserveCents:
           _reserveTargetFor(monthlyExpenseAverageCents),
       balanceSeriesByGoalId: balanceSeriesByGoalId,
+      projectionsByGoalId: projectionsByGoalId,
       isLoading: false,
       clearError: true,
     );
+  }
+
+  GoalProjection _projectionForGoal(
+    GoalPreview goal,
+    AccountPreview? account,
+  ) {
+    final currentMonth = _monthOnly(DateTime.now());
+    final currentBalanceCents =
+        account == null ? 0 : _balanceForMonth(account, currentMonth);
+    final targetCents = goal.targetAmountCents;
+    final remainingCents =
+        (targetCents - currentBalanceCents).clamp(0, targetCents).toInt();
+    final monthsToTarget = _monthsToTarget(goal.targetDate);
+    final yieldStats =
+        account == null ? _GoalYieldStats.empty : _yieldStatsFor(account);
+    final averageMonthlyContributionCents =
+        account == null ? 0 : _averageMonthlyContributionCents(account);
+    final requiredMonthlyWithoutYieldCents =
+        _requiredMonthlyWithoutYield(remainingCents, monthsToTarget);
+    final requiredMonthlyWithYieldCents = _requiredMonthlyWithYield(
+      currentBalanceCents: currentBalanceCents,
+      targetCents: targetCents,
+      monthsToTarget: monthsToTarget,
+      monthlyYieldRate: yieldStats.averageMonthlyRate,
+      fallbackCents: requiredMonthlyWithoutYieldCents,
+    );
+    final compoundProjection = _compoundProjection(
+      currentBalanceCents: currentBalanceCents,
+      targetCents: targetCents,
+      monthsToTarget: monthsToTarget,
+      averageMonthlyContributionCents: averageMonthlyContributionCents,
+      monthlyYieldRate: yieldStats.averageMonthlyRate,
+    );
+
+    return GoalProjection(
+      currentBalanceCents: currentBalanceCents,
+      targetCents: targetCents,
+      remainingCents: remainingCents,
+      monthsToTarget: monthsToTarget,
+      requiredMonthlyWithoutYieldCents: requiredMonthlyWithoutYieldCents,
+      requiredMonthlyWithYieldCents: requiredMonthlyWithYieldCents,
+      averageMonthlyYieldRate: yieldStats.averageMonthlyRate,
+      averageAnnualYieldRate: yieldStats.averageMonthlyRate <= 0
+          ? 0
+          : math.pow(1 + yieldStats.averageMonthlyRate, 12).toDouble() - 1,
+      yieldHistoryMonths: yieldStats.historyMonths,
+      averageMonthlyContributionCents: averageMonthlyContributionCents,
+      estimatedMonthlyYieldCents:
+          (currentBalanceCents * yieldStats.averageMonthlyRate).round(),
+      projectedFinalBalanceCents: compoundProjection.finalBalanceCents,
+      projectedTotalInvestedCents: compoundProjection.totalInvestedCents,
+      projectedInterestCents: compoundProjection.interestCents,
+      projectedMonths: compoundProjection.months,
+      targetReachedAt: compoundProjection.targetReachedAt,
+      estimatedCompletionWithoutYield: _estimatedCompletionMonth(
+        currentBalanceCents: currentBalanceCents,
+        targetCents: targetCents,
+        monthlyContributionCents: averageMonthlyContributionCents,
+        monthlyYieldRate: 0,
+      ),
+      estimatedCompletionWithYield: _estimatedCompletionMonth(
+        currentBalanceCents: currentBalanceCents,
+        targetCents: targetCents,
+        monthlyContributionCents: averageMonthlyContributionCents,
+        monthlyYieldRate: yieldStats.averageMonthlyRate,
+      ),
+      points: compoundProjection.points,
+      monthlyRows: compoundProjection.monthlyRows,
+      annualRows: compoundProjection.annualRows,
+    );
+  }
+
+  _GoalYieldStats _yieldStatsFor(AccountPreview account) {
+    final currentMonth = _monthOnly(DateTime.now());
+    final firstMonth = DateTime(currentMonth.year, currentMonth.month - 11);
+    final rates = <double>[];
+    var cursor = firstMonth;
+
+    while (!cursor.isAfter(currentMonth)) {
+      final monthEnd = DateTime(cursor.year, cursor.month + 1);
+      final monthYieldCents = _transactions
+          .where(
+            (transaction) =>
+                transaction.isPaid &&
+                transaction.accountId == account.id &&
+                transaction.type == 'income' &&
+                transaction.paymentMethod == _yieldPaymentMethod &&
+                !transaction.date.isBefore(cursor) &&
+                transaction.date.isBefore(monthEnd),
+          )
+          .fold<int>(0, (total, transaction) => total + transaction.amount);
+      final openingBalanceCents = _balanceBeforeDate(account, cursor);
+
+      if (monthYieldCents > 0 && openingBalanceCents > 0) {
+        rates.add(
+          (monthYieldCents / openingBalanceCents).clamp(0.0, 0.20).toDouble(),
+        );
+      }
+
+      cursor = DateTime(cursor.year, cursor.month + 1);
+    }
+
+    if (rates.isEmpty) {
+      return _GoalYieldStats.empty;
+    }
+
+    final averageRate =
+        rates.fold<double>(0, (total, rate) => total + rate) / rates.length;
+    return _GoalYieldStats(
+      averageMonthlyRate: averageRate,
+      historyMonths: rates.length,
+    );
+  }
+
+  int _averageMonthlyContributionCents(AccountPreview account) {
+    final currentMonth = _monthOnly(DateTime.now());
+    final start = DateTime(currentMonth.year, currentMonth.month - 11);
+    final end = DateTime(currentMonth.year, currentMonth.month + 1);
+    final netContributionsByMonth = <int, int>{};
+
+    void addContribution(DateTime date, int amountCents) {
+      if (date.isBefore(start) || !date.isBefore(end)) {
+        return;
+      }
+
+      final key = date.year * 12 + date.month;
+      netContributionsByMonth.update(
+        key,
+        (value) => value + amountCents,
+        ifAbsent: () => amountCents,
+      );
+    }
+
+    for (final transaction in _transactions) {
+      if (!transaction.isPaid ||
+          transaction.accountId != account.id ||
+          transaction.paymentMethod == 'credit_card' ||
+          transaction.paymentMethod == _yieldPaymentMethod) {
+        continue;
+      }
+
+      addContribution(
+        transaction.date,
+        transaction.type == 'income' ? transaction.amount : -transaction.amount,
+      );
+    }
+
+    for (final transfer in _transfers) {
+      if (!transfer.isPaid) {
+        continue;
+      }
+
+      if (transfer.fromAccountId == account.id) {
+        addContribution(transfer.date, -transfer.amount);
+      }
+      if (transfer.toAccountId == account.id) {
+        addContribution(
+          transfer.date,
+          transfer.convertedAmount ?? transfer.amount,
+        );
+      }
+    }
+
+    for (final invoice in _invoices) {
+      final paidAt = invoice.paidAt;
+      if (invoice.status != 'paid' ||
+          invoice.paymentAccountId != account.id ||
+          paidAt == null) {
+        continue;
+      }
+
+      addContribution(paidAt, -invoice.amount);
+    }
+
+    final positiveMonths = netContributionsByMonth.values
+        .where((amountCents) => amountCents > 0)
+        .toList();
+    if (positiveMonths.isEmpty) {
+      return 0;
+    }
+
+    final total =
+        positiveMonths.fold<int>(0, (sum, amountCents) => sum + amountCents);
+    return (total / positiveMonths.length).round();
+  }
+
+  _GoalCompoundProjection _compoundProjection({
+    required int currentBalanceCents,
+    required int targetCents,
+    required int monthsToTarget,
+    required int averageMonthlyContributionCents,
+    required double monthlyYieldRate,
+  }) {
+    final currentMonth = _monthOnly(DateTime.now());
+    final hasFixedDeadline = monthsToTarget > 0;
+    final maxMonths = hasFixedDeadline ? monthsToTarget : 360;
+    final points = <GoalProjectionPoint>[
+      GoalProjectionPoint(
+        month: currentMonth,
+        balanceWithoutYieldCents: currentBalanceCents,
+        balanceWithYieldCents: currentBalanceCents,
+      ),
+    ];
+    final monthlyRows = <GoalProjectionMonth>[];
+    final annualRows = <GoalProjectionYear>[];
+
+    var balance = currentBalanceCents.toDouble();
+    var totalInvested = currentBalanceCents.toDouble();
+    var targetReachedAt = targetCents > 0 && currentBalanceCents >= targetCents
+        ? currentMonth
+        : null;
+
+    for (var index = 1; index <= maxMonths; index++) {
+      final month = DateTime(currentMonth.year, currentMonth.month + index);
+      final contribution = averageMonthlyContributionCents;
+      balance += contribution;
+      totalInvested += contribution;
+
+      final beforeInterest = balance;
+      balance = balance * (1 + monthlyYieldRate);
+      final monthlyInterestCents =
+          math.max(0, (balance - beforeInterest).round());
+      final accumulatedInterestCents =
+          math.max(0, (balance - totalInvested).round());
+      final projectedBalanceCents = math.max(0, balance.round());
+      final totalInvestedCents = math.max(0, totalInvested.round());
+      final reachesTarget = targetCents > 0 &&
+          targetReachedAt == null &&
+          projectedBalanceCents >= targetCents;
+
+      if (reachesTarget) {
+        targetReachedAt = month;
+      }
+
+      monthlyRows.add(
+        GoalProjectionMonth(
+          monthNumber: index,
+          month: month,
+          contributionCents: contribution,
+          monthlyInterestCents: monthlyInterestCents,
+          accumulatedInterestCents: accumulatedInterestCents,
+          totalInvestedCents: totalInvestedCents,
+          projectedBalanceCents: projectedBalanceCents,
+          reachesTarget: reachesTarget,
+        ),
+      );
+      points.add(
+        GoalProjectionPoint(
+          month: month,
+          balanceWithoutYieldCents: totalInvestedCents,
+          balanceWithYieldCents: projectedBalanceCents,
+        ),
+      );
+
+      final isYearEnd = index % 12 == 0;
+      final isLastMonth = index == maxMonths;
+      if (isYearEnd || isLastMonth) {
+        annualRows.add(
+          GoalProjectionYear(
+            yearNumber: (index / 12).ceil(),
+            month: month,
+            totalInvestedCents: totalInvestedCents,
+            accumulatedInterestCents: accumulatedInterestCents,
+            projectedBalanceCents: projectedBalanceCents,
+          ),
+        );
+      }
+
+      if (!hasFixedDeadline && reachesTarget) {
+        break;
+      }
+    }
+
+    final lastRow = monthlyRows.isEmpty ? null : monthlyRows.last;
+    return _GoalCompoundProjection(
+      points: points,
+      monthlyRows: monthlyRows,
+      annualRows: annualRows,
+      finalBalanceCents: lastRow?.projectedBalanceCents ?? currentBalanceCents,
+      totalInvestedCents: lastRow?.totalInvestedCents ?? currentBalanceCents,
+      interestCents: lastRow?.accumulatedInterestCents ?? 0,
+      months: monthlyRows.length,
+      targetReachedAt: targetReachedAt,
+    );
+  }
+
+  int _balanceBeforeDate(AccountPreview account, DateTime cutoff) {
+    var balanceCents = account.initialBalanceCents;
+
+    for (final transaction in _transactions) {
+      if (!transaction.isPaid ||
+          transaction.accountId != account.id ||
+          !transaction.date.isBefore(cutoff) ||
+          transaction.paymentMethod == 'credit_card') {
+        continue;
+      }
+
+      balanceCents += transaction.type == 'income'
+          ? transaction.amount
+          : -transaction.amount;
+    }
+
+    for (final transfer in _transfers) {
+      if (!transfer.isPaid || !transfer.date.isBefore(cutoff)) {
+        continue;
+      }
+
+      if (transfer.fromAccountId == account.id) {
+        balanceCents -= transfer.amount;
+      }
+      if (transfer.toAccountId == account.id) {
+        balanceCents += transfer.convertedAmount ?? transfer.amount;
+      }
+    }
+
+    for (final invoice in _invoices) {
+      if (invoice.status != 'paid' ||
+          invoice.paymentAccountId != account.id ||
+          invoice.paidAt == null ||
+          !invoice.paidAt!.isBefore(cutoff)) {
+        continue;
+      }
+
+      balanceCents -= invoice.amount;
+    }
+
+    return balanceCents;
+  }
+
+  int _monthsToTarget(DateTime? targetDate) {
+    if (targetDate == null) {
+      return 0;
+    }
+
+    final currentMonth = _monthOnly(DateTime.now());
+    final targetMonth = _monthOnly(targetDate);
+    final months = ((targetMonth.year - currentMonth.year) * 12) +
+        targetMonth.month -
+        currentMonth.month +
+        1;
+    return months.clamp(1, 360).toInt();
+  }
+
+  int _requiredMonthlyWithoutYield(int remainingCents, int monthsToTarget) {
+    if (remainingCents <= 0) {
+      return 0;
+    }
+    if (monthsToTarget <= 0) {
+      return remainingCents;
+    }
+
+    return ((remainingCents + monthsToTarget - 1) / monthsToTarget).floor();
+  }
+
+  int _requiredMonthlyWithYield({
+    required int currentBalanceCents,
+    required int targetCents,
+    required int monthsToTarget,
+    required double monthlyYieldRate,
+    required int fallbackCents,
+  }) {
+    if (targetCents <= 0 || currentBalanceCents >= targetCents) {
+      return 0;
+    }
+    if (monthsToTarget <= 0 || monthlyYieldRate <= 0) {
+      return fallbackCents;
+    }
+
+    final growth = math.pow(1 + monthlyYieldRate, monthsToTarget).toDouble();
+    final projectedCurrentBalance = currentBalanceCents * growth;
+    if (projectedCurrentBalance >= targetCents) {
+      return 0;
+    }
+
+    final contributionFactor = (growth - 1) / monthlyYieldRate;
+    if (contributionFactor <= 0) {
+      return fallbackCents;
+    }
+
+    final required =
+        ((targetCents - projectedCurrentBalance) / contributionFactor).ceil();
+    return required.clamp(0, fallbackCents).toInt();
+  }
+
+  DateTime? _estimatedCompletionMonth({
+    required int currentBalanceCents,
+    required int targetCents,
+    required int monthlyContributionCents,
+    required double monthlyYieldRate,
+  }) {
+    if (targetCents <= 0 || currentBalanceCents >= targetCents) {
+      return _monthOnly(DateTime.now());
+    }
+    if (monthlyContributionCents <= 0 && monthlyYieldRate <= 0) {
+      return null;
+    }
+
+    var balance = currentBalanceCents.toDouble();
+    var cursor = _monthOnly(DateTime.now());
+    for (var index = 0; index < 360; index++) {
+      cursor = DateTime(cursor.year, cursor.month + 1);
+      balance = (balance + monthlyContributionCents) * (1 + monthlyYieldRate);
+      if (balance >= targetCents) {
+        return cursor;
+      }
+    }
+
+    return null;
   }
 
   int _calculateMonthlyExpenseAverageCents() {
@@ -837,6 +1367,43 @@ class GoalsViewModel extends StateNotifier<GoalsState> {
     _transfersSubscription?.cancel();
     super.dispose();
   }
+}
+
+class _GoalYieldStats {
+  const _GoalYieldStats({
+    required this.averageMonthlyRate,
+    required this.historyMonths,
+  });
+
+  static const empty = _GoalYieldStats(
+    averageMonthlyRate: 0,
+    historyMonths: 0,
+  );
+
+  final double averageMonthlyRate;
+  final int historyMonths;
+}
+
+class _GoalCompoundProjection {
+  const _GoalCompoundProjection({
+    required this.points,
+    required this.monthlyRows,
+    required this.annualRows,
+    required this.finalBalanceCents,
+    required this.totalInvestedCents,
+    required this.interestCents,
+    required this.months,
+    required this.targetReachedAt,
+  });
+
+  final List<GoalProjectionPoint> points;
+  final List<GoalProjectionMonth> monthlyRows;
+  final List<GoalProjectionYear> annualRows;
+  final int finalBalanceCents;
+  final int totalInvestedCents;
+  final int interestCents;
+  final int months;
+  final DateTime? targetReachedAt;
 }
 
 class GoalLinkedAccountDraft {
